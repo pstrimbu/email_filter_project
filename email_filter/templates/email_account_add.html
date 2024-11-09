@@ -1,0 +1,35 @@
+<div id="addEmailAccountPage">
+    <h2>Add Email Account</h2>
+    <form id="EmailAccountForm" method="POST" action="{{ url_for('email_account_add') }}">
+        {{ email_form.hidden_tag() }}
+        <div class="form-group">
+            {{ email_form.email_address.label(class="form-label", for=email_form.email_address.id) }} {{ email_form.email_address(class="form-control", id=email_form.email_address.id, autocomplete="username") }}
+        </div>
+        <div class="form-group">
+            {{ email_form.password.label(class="form-label", for=email_form.password.id) }} {{ email_form.password(class="form-control", id=email_form.password.id, type="password", autocomplete="new-password") }}
+        </div>
+        <div class="form-group">
+            {{ email_form.email_type.label(class="form-label", for="emailTypeSelect") }}
+            <select id="emailTypeSelect" name="email_type" class="form-control">
+                <option value="POP3">POP3</option>
+                <option value="IMAP" selected>IMAP</option> <!-- Set IMAP as default -->
+            </select>
+        </div>
+        <div class="form-group">
+            {{ email_form.imap_server.label(class="form-label", for=email_form.imap_server.id) }} {{ email_form.imap_server(class="form-control", id=email_form.imap_server.id) }}
+        </div>
+        <div class="form-group">
+            {{ email_form.imap_port.label(class="form-label", for=email_form.imap_port.id) }} {{ email_form.imap_port(class="form-control", id=email_form.imap_port.id) }}
+        </div>
+        <div class="form-group form-check">
+            {{ email_form.imap_use_ssl(class="form-check-input", id=email_form.imap_use_ssl.id) }} {{ email_form.imap_use_ssl.label(class="form-check-label", for=email_form.imap_use_ssl.id) }}
+        </div>
+        <div class="form-group d-flex justify-content-between mt-3">
+            <button type="button" class="btn btn-warning" id="testNewEmailAccountButton">Test Connection</button>
+            <div>
+                <button type="submit" id="submitAddAccountButton" class="btn btn-primary">Add Account</button>
+                <button type="button" id="cancelAddAccountButton" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </form>
+</div>

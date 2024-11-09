@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% block title %}Email Matchbox{% endblock %} {% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div id="sidebar">
+            <ul class="list-group">
+                <li class="list-group-item" id="email-accounts-item">
+                    <a href="#" data-content="{{ url_for('email_accounts') }}" class="load-content">Email Accounts</a>
+                </li>
+                <li class="list-group-item" id="dates-item">
+                    <a href="#" data-content="{{ url_for('dates_view') }}" class="load-content">Dates</a>
+                </li>
+                <li class="list-group-item" id="emails-item">
+                    <a href="#" data-content="{{ url_for('emails_view') }}" class="load-content">Emails</a>
+                </li>
+                <li class="list-group-item" id="email-addresses-item">
+                    <a href="#" data-content="{{ url_for('email_addresses_view') }}" class="load-content">Email Addresses</a>
+                </li>
+                <li class="list-group-item" id="filters-item">
+                    <a href="#" data-content="{{ url_for('filters_view') }}" class="load-content">Filters</a>
+                </li>
+                <li class="list-group-item" id="ai-prompts-item">
+                    <a href="#" data-content="{{ url_for('ai_prompts_view') }}" class="load-content">AI Prompts</a>
+                </li>
+                <li class="list-group-item" id="process-item">
+                    <a href="#" data-content="{{ url_for('process_email_results_view') }}" class="load-content">Process</a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Content -->
+        <div id="contentPane" class="main-content">
+            <!-- Dynamic content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+{% endblock %}

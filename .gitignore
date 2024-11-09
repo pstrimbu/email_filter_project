@@ -1,0 +1,13 @@
+__pycache__/
+.venv/
+.vscode/
+email_filter/__pycache__/
+email_filter/.DS_Store
+email_filter/.venv
+email_filter/.vscode
+migrations/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.db-lock

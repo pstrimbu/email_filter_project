@@ -1,0 +1,34 @@
+<div id="emailAccountsPage" class="px-3">
+    <!-- <h2 class="mb-3">Email Accounts</h2> -->
+    <!-- Add Account Button -->
+    <button class="btn btn-success mb-3" id="addAccountButton">Add Account</button>
+
+    <!-- Email Accounts Table -->
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Email Address</th>
+                    <th>Provider</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in email_accounts %}
+                <tr>
+                    <td>{{ account.email }}</td>
+                    <td>{{ account.provider }}</td>
+                    <td>
+                        <button class="btn btn-info btn-sm view-account" data-account-id="{{ account.id }}">View</button>
+                        <button class="btn btn-warning btn-sm edit-account" data-account-id="{{ account.id }}" data-content="{{ url_for('email_account_edit', account_id=account.id) }}">Edit</button>
+                        <form method="POST" action="{{ url_for('email_account_delete', account_id=account.id) }}" style="display:inline;">
+                            {{ csrf_form.hidden_tag() }}
+                            <button type="submit" class="btn btn-danger btn-sm" data-account-id="{{ account.id }}" id="deleteAccountButton">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

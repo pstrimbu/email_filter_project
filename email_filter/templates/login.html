@@ -1,0 +1,24 @@
+{% extends "base.html" %} {% block title %}Login{% endblock %} {% block content %}
+<div class="auth-wrapper">
+    <div class="auth-container">
+        <h2 class="auth-title">Welcome Back</h2>
+        <p class="auth-subtitle">Please login to your account</p>
+        <form method="POST" action="{{ url_for('login') }}" class="auth-form">
+            {{ form.hidden_tag() }}
+            <div class="form-group">
+                {{ form.email(class="form-control", placeholder="Email") }}
+            </div>
+            <div class="form-group">
+                {{ form.password(class="form-control", placeholder="Password") }}
+            </div>
+            <div class="form-group form-check">
+                {{ form.remember(class="form-check-input") }} {{ form.remember.label(class="form-check-label") }}
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Login</button>
+        </form>
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{{ url_for('register') }}">Register</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,797 @@
+/* General Styles */
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: Arial, sans-serif;
+    background-color: #f7f9fc;
+}
+
+body {
+    min-height: 100vh;
+    padding-top: 56px;
+    /* Adjust this value to match your navbar height */
+}
+
+
+/* Main Content */
+
+.main-content {
+    margin-left: 250px;
+    /* Ensure it starts to the right of the sidebar */
+    padding: 10px;
+    overflow-y: auto;
+    height: calc(100vh - 56px);
+    /* Subtract navbar height */
+    background-color: #f7f9fc;
+    box-sizing: border-box;
+}
+
+
+/* Navbar Styles */
+
+.navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1030;
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 0.5rem 1rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    /* Vertically center the navbar content */
+}
+
+.navbar-brand {
+    font-weight: 600;
+    color: #333;
+    transition: color 0.3s ease;
+}
+
+.navbar-brand:hover {
+    color: #007bff;
+}
+
+.navbar-brand span {
+    font-size: 1.2rem;
+}
+
+.logo-img {
+    max-height: 40px;
+    width: auto;
+    margin-right: 10px;
+    /* Optional: space between logo and text */
+    transition: transform 0.3s ease;
+}
+
+.navbar-brand:hover .logo-img {
+    transform: scale(1.05);
+}
+
+.navbar-nav .nav-item {
+    margin-left: 0.5rem;
+}
+
+.navbar-nav .nav-link {
+    color: #555;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+    border-radius: 4px;
+}
+
+.navbar-nav .nav-link:hover {
+    color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.navbar-toggler {
+    border: none;
+    padding: 0.25rem 0.75rem;
+}
+
+.navbar-toggler:focus {
+    box-shadow: none;
+}
+
+@media (max-width: 991.98px) {
+    .navbar-nav {
+        padding-top: 0.5rem;
+    }
+    .navbar-nav .nav-item {
+        margin-left: 0;
+    }
+    .navbar-nav .nav-link {
+        padding: 0.5rem 0;
+    }
+}
+
+.navbar .d-flex {
+    align-items: center;
+    white-space: nowrap;
+    /* Prevent line breaks */
+}
+
+.active-account-label {
+    margin-left: 70px;
+    /* Add spacing to the left */
+}
+
+
+/* Sidebar Styling */
+
+#sidebar {
+    width: 250px;
+    height: calc(100vh - 56px);
+    /* Subtract navbar height from viewport height */
+    position: fixed;
+    top: 56px;
+    left: 0;
+    z-index: 1000;
+    background-color: #ffffff;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    padding-top: 20px;
+    border-right: 1px solid #ddd;
+}
+
+#sidebar .list-group-item {
+    border: none;
+    padding: 15px 20px;
+    font-size: 16px;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+}
+
+#sidebar .list-group-item a {
+    text-decoration: none;
+    color: #555;
+    display: block;
+    width: 100%;
+    height: 100%;
+    transition: all 0.2s ease;
+}
+
+#sidebar .list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+#sidebar .list-group-item:hover a {
+    color: #007bff;
+}
+
+#sidebar .list-group-item.active {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-left-color: #007bff;
+}
+
+#sidebar .list-group-item.active a {
+    color: #007bff;
+    font-weight: 600;
+}
+
+
+/* Responsive adjustments */
+
+@media (max-width: 768px) {
+    #sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+    }
+    #contentPane {
+        margin-left: 0;
+        padding-top: 20px;
+    }
+}
+
+
+/* Content Pane */
+
+#contentPane {
+    margin-left: 0;
+    overflow-y: auto;
+    height: calc(100vh - 90px);
+    /* Subtract the navbar height */
+    background-color: #f7f9fc;
+}
+
+
+/* Email Accounts Page */
+
+#emailAccountsPage,
+#addEmailAccountPage,
+#editEmailAccountPage {
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+
+/* View Account Page */
+
+#viewEmailAccountPage {
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    text-align: left;
+}
+
+#viewEmailAccountPage h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+#viewEmailAccountPage .form-group {
+    margin-bottom: 15px;
+}
+
+#viewEmailAccountPage .form-label {
+    font-weight: bold;
+    color: #555;
+}
+
+#viewEmailAccountPage .form-control-static {
+    padding: 10px;
+    background-color: #f7f9fc;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    color: #333;
+}
+
+#closeViewAccountButton {
+    display: block;
+    margin: 20px 0;
+    padding: 10px 20px;
+    font-size: 1rem;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#closeViewAccountButton:hover {
+    background-color: #0056b3;
+}
+
+#addFilterButton {
+    margin-top: 10px;
+}
+
+
+/* Flash Messages Styles */
+
+.flash-messages {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.alert {
+    height: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0.25rem;
+}
+
+.alert-dismissible .btn-close {
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: inherit;
+    cursor: pointer;
+}
+
+
+/* Auth Pages */
+
+.auth-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f7f9fc;
+    padding-top: 56px;
+}
+
+.auth-container {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    width: 100%;
+    max-width: 400px;
+}
+
+.auth-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.auth-subtitle {
+    font-size: 1rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.auth-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.auth-form .form-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+}
+
+.auth-form .btn-primary {
+    background-color: #007bff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.auth-form .btn-primary:hover {
+    background-color: #0056b3;
+}
+
+.auth-footer {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.auth-footer a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+
+/* Utility Classes */
+
+.container-fluid {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.row {
+    margin-left: 0;
+    margin-right: 0;
+    display: block;
+}
+
+.form-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.form-group.col-md-6 {
+    flex: 0 0 48%;
+}
+
+
+/* Tooltip Styles */
+
+.info-icon {
+    display: inline-block;
+    margin-left: 5px;
+    cursor: pointer;
+    color: #007bff;
+    font-weight: bold;
+    position: relative;
+}
+
+.info-icon:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: -5px;
+    left: 105%;
+    background-color: #333;
+    color: #fff;
+    padding: 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 10;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+/* Header */
+
+.header {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    font-style: italic;
+    color: #666;
+    margin-top: 5px;
+}
+
+.navbar-subtitle {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: #666;
+    margin-top: 0;
+}
+
+.navbar-brand .d-flex.flex-column {
+    gap: 0;
+}
+
+
+/* Add this to position the live update toggle */
+
+#emailsPage .form-check.form-switch {
+    margin-left: auto;
+    /* Align to the right */
+}
+
+
+/* Ensure the header and toggle are aligned */
+
+#emailsPage .d-flex {
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bold-flash {
+    font-weight: bold;
+    animation: flash 0.5s ease-in-out;
+}
+
+@keyframes flash {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.form-check.form-switch {
+    margin-left: auto;
+    /* Align to the right */
+}
+
+
+/* Custom styles for labels */
+
+.form-label.small {
+    font-size: 0.875rem;
+    /* Smaller font size */
+    color: #6c757d;
+    /* Muted color */
+}
+
+.small.text-muted {
+    font-size: 0.875rem;
+    /* Smaller font size */
+    color: #6c757d;
+    /* Muted color */
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+
+/* Ensure consistent alignment for form groups */
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+
+/* Custom styles for labels */
+
+.form-label.small {
+    font-size: 0.875rem;
+    /* Smaller font size */
+    color: #6c757d;
+    /* Muted color */
+    margin-bottom: 0.25rem;
+    /* Add some space below the label */
+}
+
+.small.text-muted {
+    font-size: 0.875rem;
+    /* Smaller font size */
+    color: #6c757d;
+    /* Muted color */
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+
+/* Smaller action buttons */
+
+.btn-group .btn {
+    padding: 0.10rem 0.5rem;
+    /* Smaller padding */
+    font-size: 0.8rem;
+    /* Smaller font size */
+}
+
+.progress {
+    height: 20px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: #007bff;
+    transition: width 0.6s ease;
+    color: white;
+    text-align: center;
+    line-height: 20px;
+    /* Match the height of the progress bar */
+}
+
+.loading-spinner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1050;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.8);
+    width: 100%;
+    height: 100%;
+}
+
+
+/* Add this to ensure buttons are aligned and spaced properly */
+
+.form-group.d-flex {
+    display: flex;
+    justify-content: flex-start;
+    align-items: left;
+    gap: 0px;
+}
+
+.btn {
+    margin: 0 5px;
+    /* Optional: Add some margin between buttons */
+}
+
+.action-buttons-td {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    white-space: nowrap;
+    height: 100%;
+}
+
+.action-buttons-td .btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 6px 0 14px 0;
+}
+
+#ai-prompt-action-buttons-td .btn {
+    margin: 6px 0 14px 0;
+}
+
+.table {
+    width: 100%;
+    margin-bottom: 1rem;
+    color: #212529;
+    background-color: #fff;
+    border-collapse: collapse;
+}
+
+.table th,
+.table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+}
+
+.table thead th {
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.table tbody tr:nth-of-type(odd) {
+    background-color: #f2f2f2;
+}
+
+.table tbody tr:hover {
+    background-color: #e9ecef;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: #f8f9fa;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #e9ecef;
+}
+
+.prompt-text {
+    resize: vertical;
+    width: 100%;
+}
+
+.delete-filter {
+    cursor: pointer;
+    height: 30px;
+    width: 30px;
+    padding: 0;
+    font-size: .8rem;
+}
+
+.action-buttons .move-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.action-buttons .delete-prompt {
+    margin-left: 5px;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 0.2rem;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+#filterFormGroup {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+#filter_word {
+    flex-grow: 1;
+    /* This allows the input field to take up remaining space */
+}
+
+.action-button {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 6px 0;
+}
+
+#filtersTableBody tr {
+    height: 50px;
+    min-height: 50px;
+    max-height: 50px;
+}
+
+#filtersTableBody td {
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    line-height: 40px;
+    padding: 0 5px 0 5px;
+    margin: 0;
+    box-sizing: border-box;
+    border: none;
+}
+
+#filtersTableBody .action-buttons-td {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    white-space: nowrap;
+    height: 100%;
+    border: none;
+    margin-top: 5px;
+}
+
+#filtersTableBody td:nth-child(3),
+thead th:nth-child(3) {
+    text-align: center;
+}
+
+#promptsTableBody tr {
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    background-color: #F7F9FC;
+}
+
+#promptsTableBody td {
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    line-height: 60px;
+    padding: 0 5px;
+    margin: 0;
+    box-sizing: border-box;
+    border: none;
+    background-color: #F7F9FC;
+}
+
+#promptsTableBody .action-buttons-td {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    white-space: nowrap;
+    height: 100%;
+    border: none;
+    padding-top: 10px;
+}
+
+#promptsTableBody td:nth-child(3),
+thead th:nth-child(3) {
+    text-align: center;
+}
+
+#promptsTableBody .prompt-text {
+    margin-top: 12px;
+    resize: vertical;
+    width: 100%;
+}

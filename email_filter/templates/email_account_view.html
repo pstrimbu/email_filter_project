@@ -1,0 +1,27 @@
+<div id="viewEmailAccountPage">
+    <h2>View Email Account</h2>
+    <div class="form-group">
+        <label class="form-label">Email Address:</label>
+        <p class="form-control-static">{{ account.email }}</p>
+    </div>
+    <div class="form-group">
+        <p class="form-control-static">{{ account.password }}</p>
+    </div>
+    <div class="form-group">
+        <label class="form-label">Provider:</label>
+        <p class="form-control-static">{{ account.provider }}</p>
+    </div>
+    <div class="form-group">
+        <label class="form-label">IMAP Server:</label>
+        <p class="form-control-static">{{ account.imap_server }}</p>
+    </div>
+    <div class="form-group">
+        <label class="form-label">IMAP Port:</label>
+        <p class="form-control-static">{{ account.imap_port }}</p>
+    </div>
+    <div class="form-group">
+        <label class="form-label">Use SSL:</label>
+        <p class="form-control-static">{{ 'Yes' if account.imap_use_ssl else 'No' }}</p>
+    </div>
+    <button type="button" id="closeViewAccountButton" class="btn btn-secondary mt-3">Close</button>
+</div>

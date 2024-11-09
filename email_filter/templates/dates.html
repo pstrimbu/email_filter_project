@@ -1,0 +1,22 @@
+<div class="container mt-4">
+    <!-- <h3>Manage Dates</h3> -->
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <form id="datesForm" method="POST" action="{{ url_for('dates_view') }}">
+        <div class="form-row">
+            <div class="form-group col-md-6">
+                <label for="start_date">Start Date</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" required value="{{ start_date }}">
+            </div>
+            <div class="form-group col-md-6">
+                <label for="end_date">End Date</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" required value="{{ end_date }}">
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('dates-item').querySelector('.load-content').click();">Cancel</button>
+            </div>
+        </div>
+    </form>
+</div>

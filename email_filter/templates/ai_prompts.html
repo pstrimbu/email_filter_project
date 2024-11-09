@@ -1,0 +1,51 @@
+<div class="container mt-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <!-- <h3>Manage AI Prompts</h3> -->
+    <button id="addPromptButton" class="btn btn-success mb-3">Add Prompt</button>
+    <table class="table">
+        <colgroup>
+            <col style="width: 80px;">
+            <col style="width: 80px;">
+            <col>
+            <col style="width: 80px;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th></th>
+                <th></th>
+                <th>Prompt Text</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="promptsTableBody">
+            {% for prompt in ai_prompts %}
+            <tr data-id="{{ prompt.id }}">
+                <td id="ai-prompt-action-buttons-td" class="action-buttons-td">
+                    <button class="btn btn-sm btn-secondary action-button move-up"><i class="fas fa-arrow-up"></i></button>
+                    <button class="btn btn-sm btn-secondary action-button move-down"><i class="fas fa-arrow-down"></i></button>
+                    <button class="btn btn-sm btn-danger action-button delete-prompt"><i class="fas fa-times"></i></button>
+                </td>
+                <td>
+                    <div class="btn-group" role="group" aria-label="Prompt Action">
+                        <button type="button" class="btn btn-sm {{ 'btn-success' if prompt.action == 'include' else 'btn-secondary' }} prompt-action-toggle" data-action="include" data-prompt-id="{{ prompt.id }}">
+                            Include
+                        </button>
+                        <button type="button" class="btn btn-sm {{ 'btn-danger' if prompt.action == 'exclude' else 'btn-secondary' }} prompt-action-toggle" data-action="exclude" data-prompt-id="{{ prompt.id }}">
+                            Exclude
+                        </button>
+                    </div>
+                </td>
+                <td>
+                    <textarea class="form-control prompt-text" rows="1">{{ prompt.prompt_text }}</textarea>
+                </td>
+                <td class="action-buttons-td">
+                    <button class="btn btn-sm btn-success action-button save-prompt" disabled><i class="fas fa-check"></i></button>
+                    <button class="btn btn-sm btn-danger action-button cancel-prompt" disabled><i class="fas fa-times"></i></button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <!-- <button id="savePromptsButton" class="btn btn-primary">Save</button>
+    <button id="cancelPromptsButton" class="btn btn-secondary">Cancel</button> -->
+</div>

@@ -1,0 +1,42 @@
+<div id="emailsPage" class="px-3">
+
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Buttons and Live Update Toggle -->
+    <div class="d-flex">
+        <div class="d-flex align-items-lg-start">
+            <button class="btn btn-danger me-2" id="deleteEmailsButton">Delete All Emails</button>
+            <button class="btn btn-primary me-2" id="scanEmailsButton">Scan Emails</button>
+            <span id="runningIndicator" style="display: none;">Running...</span>
+            <button class="btn btn-warning ms-2" id="stopButton" style="display: none;">Stop</button>
+        </div>
+        <div class="d-flex align-items-lg-end">
+            <div class="form-check form-switch ms-auto">
+                <input class="form-check-input" type="checkbox" id="liveUpdateToggle">
+                <label class="form-check-label" for="liveUpdateToggle">Live Update</label>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        &nbsp;
+    </div>
+
+    <div class="table-responsive mb-3">
+        <table class="table table-striped table-hover" id="emailFolderTable">
+            <thead>
+                <tr>
+                    <th>Folder</th>
+                    <th>Total Count</th>
+                    <th>Read</th>
+                    <!-- New column for Read -->
+                    <th>Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rows will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+</div>

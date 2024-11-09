@@ -1,0 +1,32 @@
+<div id="emailAddressesPage" class="px-3">
+
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Email Addresses Table -->
+    <div class="table-responsive">
+        <table class="table table-striped table-hover" id="emailAddressesTable">
+            <thead>
+                <tr>
+                    <th>Email Address</th>
+                    <th>Count</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for email in email_addresses %}
+                <tr>
+                    <td>{{ email.email }}</td>
+                    <td>{{ email.email_count }}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn {% if email.state == 'exclude' %}btn-danger{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="exclude">Exclude</button>
+                            <button type="button" class="btn {% if email.state == 'ignore' %}btn-warning{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="ignore">Ignore</button>
+                            <button type="button" class="btn {% if email.state == 'include' %}btn-success{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="include">Include</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

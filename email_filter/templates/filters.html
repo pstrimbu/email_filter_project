@@ -1,0 +1,49 @@
+<div class="container mt-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button id="addFilterButton" class="btn btn-success mb-3">Add Filter</button>
+    <div class="mt-4">
+        <h6>(if there are conflicts, the lowest entry takes priority)</h6>
+        <table class="table table-striped">
+            <colgroup>
+                <col style="width: 90px;">
+                <col style="width: 100px;">
+                <col style="width: 130px;">
+                <col>
+                <col>
+            </colgroup>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th></th>
+                    <th>Matching Emails</th>
+                    <th>Filter</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="filtersTableBody">
+                {% for filter in filters %}
+                <tr data-filter-id="{{ filter.id }}">
+                    <td class="action-buttons-td">
+                        <button class="btn btn-sm btn-secondary action-button move-up"><i class="fas fa-arrow-up"></i></button>
+                        <button class="btn btn-sm btn-secondary action-button move-down"><i class="fas fa-arrow-down"></i></button>
+                        <button class="btn btn-sm btn-danger action-button delete-filter"><i class="fas fa-times"></i></button>
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group" aria-label="Filter Action">
+                            <button type="button" class="filter-action-button btn btn-sm {{ 'btn-success' if filter.action == 'include' else 'btn-secondary' }} filter-action-toggle" data-action="include" data-filter-id="{{ filter.id }}">
+                                Include
+                            </button>
+                            <button type="button" class="filter-action-buttonbtn btn-sm {{ 'btn-danger' if filter.action == 'exclude' else 'btn-secondary' }} filter-action-toggle" data-action="exclude" data-filter-id="{{ filter.id }}">
+                                Exclude
+                            </button>
+                        </div>
+                    </td>
+                    <td>{{ filter.email_count }}</td>
+                    <td>{{ filter.filter }}</td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
