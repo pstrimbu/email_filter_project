@@ -795,3 +795,14 @@ thead th:nth-child(3) {
     resize: vertical;
     width: 100%;
 }
+
+.form-row.align-items-center {
+    display: flex;
+    align-items: center;
+}
+
+.form-check-label {
+    margin-left: 0.5rem;
+    margin-bottom: 0;
+    /* Ensure no vertical alignment issues */
+}

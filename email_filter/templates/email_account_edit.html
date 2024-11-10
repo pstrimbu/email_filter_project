@@ -14,23 +14,16 @@
 
         <div class="form-group">
             {{ email_form.email_type.label(class="form-label", for="emailTypeSelect") }}
-            <select id="emailTypeSelect" name="email_type" class="form-control">
-                <option value="POP3" {% if account.provider == 'POP3' %}selected{% endif %}>POP3</option>
-                <option value="IMAP" {% if account.provider == 'IMAP' %}selected{% endif %}>IMAP</option>
+            <select id="emailTypeSelect" name="email_type" class="form-control" onchange="updateImapSettings()">
+                <option value="GMAIL" {% if account.provider == 'GMAIL' %}selected{% endif %}>GMAIL</option>
+                <option value="APPLE" {% if account.provider == 'APPLE' %}selected{% endif %}>APPLE</option>
             </select>
         </div>
 
-        <div class="form-group">
-            {{ email_form.imap_server.label(class="form-label") }} {{ email_form.imap_server(class="form-control", value=account.imap_server) }}
-        </div>
-
-        <div class="form-group">
-            {{ email_form.imap_port.label(class="form-label") }} {{ email_form.imap_port(class="form-control", value=account.imap_port) }}
-        </div>
-
-        <div class="form-group form-check">
-            {{ email_form.imap_use_ssl(class="form-check-input", checked="checked" if account.imap_use_ssl else "") }} {{ email_form.imap_use_ssl.label(class="form-check-label") }}
-        </div>
+        <!-- Hidden fields for IMAP settings -->
+        <input type="hidden" id="imapServer" name="imap_server" value="{{ account.imap_server }}">
+        <input type="hidden" id="imapPort" name="imap_port" value="{{ account.imap_port }}">
+        <input type="hidden" id="imapUseSsl" name="imap_use_ssl" value="{{ 'y' if account.imap_use_ssl else 'n' }}">
 
         <div class="form-group d-flex justify-content-between mt-3">
             <button type="button" class="btn btn-warning" id="testConnectionButton" data-account-id="{{ account.id }}">Test Connection</button>

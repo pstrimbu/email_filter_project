@@ -5,14 +5,13 @@ from email.parser import BytesParser
 from bs4 import BeautifulSoup
 import quopri
 
-def fetch_icloud_emails(username, password):
+def fetch_emails(username, password, imap_server):
     # Set up directory for storing email content
     current_dir = os.getcwd()
     emails_dir = os.path.join(current_dir, "emails")
     os.makedirs(emails_dir, exist_ok=True)
 
     # Connect to the iCloud IMAP server
-    imap_server = "imap.mail.me.com"
     mail = imaplib.IMAP4_SSL(imap_server)
     mail.login(username, password)
     mail.select("inbox")
@@ -78,7 +77,12 @@ def fetch_icloud_emails(username, password):
 
     mail.logout()
 
-# Example usage
-username = "peterstrimbu@me.com"
-password = "cewk-qotr-rvfc-jiag"
-fetch_icloud_emails(username, password)
+# username = "peterstrimbu@me.com"
+# password = "cewk-qotr-rvfc-jiag"
+# imap_server = "imap.mail.me.com"
+
+username = "peter@strimbu.com"
+password = "tyct mvou tbro pnhl"
+imap_server = "imap.gmail.com"
+
+fetch_emails(username, password, imap_server)

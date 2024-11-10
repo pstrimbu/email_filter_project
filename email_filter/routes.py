@@ -10,7 +10,7 @@ from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status
 from .export_processor import process_email_results
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, and_
 from email_filter.aws import delete_file as aws_delete_file
 
 
@@ -168,13 +168,16 @@ def init_routes(app):
         if request.method == 'POST':
             if email_form.validate_on_submit():
                 try:
+                    # Convert 'y'/'n' to True/False
+                    imap_use_ssl = email_form.imap_use_ssl.data.lower() == 'y'
+                    
                     new_account = EmailAccount(
                         email=email_form.email_address.data,
                         password=email_form.password.data,
                         provider=email_form.email_type.data,
                         imap_server=email_form.imap_server.data,
-                        imap_port=email_form.imap_port.data,
-                        imap_use_ssl=email_form.imap_use_ssl.data,
+                        imap_port=int(email_form.imap_port.data),  # Ensure port is an integer
+                        imap_use_ssl=imap_use_ssl,
                         user_id=current_user.id
                     )
                     db.session.add(new_account)
@@ -182,9 +185,10 @@ def init_routes(app):
                     return jsonify(success=True, message='Email account added successfully!', account_id=new_account.id)
                 except Exception as e:
                     return jsonify(success=False, error=str(e))
-            return jsonify(success=False, error="Form validation failed")
+            else:
+                print("Form validation errors:", email_form.errors)
+                return jsonify(success=False, error="Form validation failed")
 
-        # Render the form for GET requests
         return render_template('email_account_add.html', email_form=email_form)
 
     @app.route('/email_account_edit/<int:account_id>', methods=['GET', 'POST'])
@@ -330,23 +334,22 @@ def init_routes(app):
 
     #     return jsonify({'success': True, 'message': 'Email action updated successfully'})
 
-    def test_email_connection_logic(email_address, password, email_type, server, port, use_ssl):
+    def test_email_connection_logic(email_address, password, email_type, server=None, port=None, use_ssl=None):
         try:
-            if email_type == 'IMAP':
-                if use_ssl:
-                    imap = IMAP4_SSL(server, port)
-                else:
-                    imap = IMAP4_SSL(server, port)  # Modify if you support non-SSL
+            # Automatically set server details based on email type
+            if email_type == 'GMAIL':
+                server = 'imap.gmail.com'
+                port = 993
+                use_ssl = True
+            elif email_type == 'APPLE':
+                server = 'imap.mail.me.com'
+                port = 993
+                use_ssl = True
+
+            if email_type in ['GMAIL', 'APPLE']:
+                imap = IMAP4_SSL(server, port)
                 imap.login(email_address, password)
                 imap.logout()
-            elif email_type == 'POP3':
-                if use_ssl:
-                    pop = POP3_SSL(server, port)
-                else:
-                    pop = POP3(server, port)
-                pop.user(email_address)
-                pop.pass_(password)
-                pop.quit()
             return True, None
         except Exception as e:
             return False, str(e)
@@ -447,7 +450,7 @@ def init_routes(app):
             ).outerjoin(
                 Email, or_(
                     Email.sender == EmailAddress.email,
-                    func.find_in_set(EmailAddress.email, Email.receivers) > 0
+                    func.instr(Email.receivers, EmailAddress.email) > 0
                 )
             ).filter(
                 EmailAccount.user_id == current_user.id,
@@ -540,8 +543,19 @@ def init_routes(app):
         if request.method == 'POST':
             start_date = request.form.get('start_date', '')
             end_date = request.form.get('end_date', '')
-            account.start_date = datetime.strptime(start_date, '%Y-%m-%d')
-            account.end_date = datetime.strptime(end_date, '%Y-%m-%d')
+
+            # Check if limitDates is checked
+            limit_dates_checked = request.form.get('limit_dates') == 'on'
+
+            if limit_dates_checked:
+                # Parse dates only if limitDates is checked
+                account.start_date = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+                account.end_date = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+            else:
+                # Set dates to None if limitDates is not checked
+                account.start_date = None
+                account.end_date = None
+
             db.session.commit()
             return jsonify(success=True, message='Dates updated successfully')
 

@@ -2,14 +2,27 @@
     <!-- <h3>Manage Dates</h3> -->
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <form id="datesForm" method="POST" action="{{ url_for('dates_view') }}">
-        <div class="form-row">
+        <div>
+            <table>
+                <tr>
+                    <td>
+                        <input type="checkbox" class="form-check-input" id="limitDates" name="limit_dates" {{ 'checked' if start_date and end_date else '' }}>
+                    </td>
+                    <td>
+                        <label for="limitDates" class="form-check-label ms-2">Limit Dates</label>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        &nbsp;
+        <div class="form-row" id="dateSelectors" {% if not start_date and not end_date %}style="display: none;" {% endif %}>
             <div class="form-group col-md-6">
                 <label for="start_date">Start Date</label>
-                <input type="date" class="form-control" id="start_date" name="start_date" required value="{{ start_date }}">
+                <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
             </div>
             <div class="form-group col-md-6">
                 <label for="end_date">End Date</label>
-                <input type="date" class="form-control" id="end_date" name="end_date" required value="{{ end_date }}">
+                <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
             </div>
         </div>
         <div class="row mt-3">

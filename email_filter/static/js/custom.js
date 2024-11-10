@@ -373,6 +373,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (this.checked) {
                     // Start live updates
                     liveUpdateInterval = setInterval(() => {
+                        const runningIndicator = document.getElementById('runningIndicator');
+                        if (!runningIndicator) {
+                            clearInterval(liveUpdateInterval);
+                            console.log('Running indicator not found. stopping live update.');
+                            return;
+                        }
                         // Flash the "Live Update" text
                         liveUpdateLabel.classList.add('bold-flash');
                         setTimeout(() => {
@@ -615,6 +621,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+
+        const limitDatesCheckbox = document.getElementById('limitDates');
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+
+        if (limitDatesCheckbox) {
+            limitDatesCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    startDateInput.setAttribute('required', 'required');
+                    endDateInput.setAttribute('required', 'required');
+                    dateSelectors.style.display = 'flex';
+                } else {
+                    startDateInput.removeAttribute('required');
+                    endDateInput.removeAttribute('required');
+                    dateSelectors.style.display = 'none';
+                    startDateInput.value = ''; // Set start date to None
+                    endDateInput.value = ''; // Set end date to None
+                }
+            });
+
+            // Initial check to set the required attribute based on the current state
+            if (limitDatesCheckbox.checked) {
+                startDateInput.setAttribute('required', 'required');
+                endDateInput.setAttribute('required', 'required');
+            } else {
+                startDateInput.removeAttribute('required');
+                endDateInput.removeAttribute('required');
+            }
+        }
     }
 
     initializeComponents();
@@ -751,13 +786,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.matches('#datesForm')) {
             const startDate = document.getElementById('start_date').value;
             const endDate = document.getElementById('end_date').value;
+            const limitDatesChecked = document.getElementById('limitDates').checked;
 
-
-            // Update the navbar dropdown with the new dates
+            // Update the navbar dropdown with the new dates only if the form is submitted
             const selectedOption = emailAccountSelect.querySelector(`option[value="${selectedAccountId}"]`);
             if (selectedOption) {
                 const email = selectedOption.textContent.trim().split(' ')[0]; // Assuming email is the first part
-                selectedOption.textContent = `${email} (${startDate} - ${endDate})`;
+                if (limitDatesChecked) {
+                    selectedOption.textContent = `${email} (${startDate} - ${endDate})`;
+                } else {
+                    selectedOption.textContent = email; // Remove dates from the text
+                }
             }
 
             e.preventDefault();
@@ -1108,14 +1147,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 const runningIndicator = document.getElementById('runningIndicator');
                 const stopButton = document.getElementById('stopButton');
                 if (data.status === 'running') {
-                    runningIndicator.style.display = 'inline';
-                    stopButton.style.display = 'inline';
+                    if (runningIndicator) {
+                        runningIndicator.style.display = 'inline';
+                        stopButton.style.display = 'inline';
+                    }
                 } else {
-                    runningIndicator.style.display = 'none';
-                    stopButton.style.display = 'none';
-                    // Disable live update toggle
-                    liveUpdateToggle.checked = false;
-                    liveUpdateToggle.dispatchEvent(new Event('change'));
+                    if (runningIndicator) {
+                        runningIndicator.style.display = 'none';
+                        stopButton.style.display = 'none';
+                        // Disable live update toggle
+                        liveUpdateToggle.checked = false;
+                        liveUpdateToggle.dispatchEvent(new Event('change'));
+                    }
                 }
             })
             .catch(error => {
@@ -1123,5 +1166,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error checking scan status:', error);
             });
     }
+
+    function updateImapSettings() {
+        const emailTypeSelect = document.getElementById('emailTypeSelect');
+        const imapServer = document.getElementById('imapServer');
+        const imapPort = document.getElementById('imapPort');
+        const imapUseSsl = document.getElementById('imapUseSsl');
+
+        if (emailTypeSelect.value === 'GMAIL') {
+            imapServer.value = 'imap.gmail.com';
+            imapPort.value = '993';
+            imapUseSsl.value = 'y';
+        } else if (emailTypeSelect.value === 'APPLE') {
+            imapServer.value = 'imap.mail.me.com';
+            imapPort.value = '993';
+            imapUseSsl.value = 'y';
+        }
+    }
+
+    // document.addEventListener('submit', function(e) {
+    //     if (e.target.matches('#datesForm')) {
+    //         e.preventDefault();
+    //         const startDate = document.getElementById('start_date').value;
+    //         const endDate = document.getElementById('end_date').value;
+    //         const limitDatesChecked = document.getElementById('limitDates').checked;
+
+    //         // Update the navbar dropdown with the new dates only if the form is submitted
+    //         const selectedOption = emailAccountSelect.querySelector(`option[value="${selectedAccountId}"]`);
+    //         if (selectedOption) {
+    //             const email = selectedOption.textContent.trim().split(' ')[0]; // Assuming email is the first part
+    //             if (limitDatesChecked) {
+    //                 selectedOption.textContent = `${email} (${startDate} - ${endDate})`;
+    //             } else {
+    //                 selectedOption.textContent = email; // Remove dates from the text
+    //             }
+    //         }
+
+    //         submitForm(e.target, '/dates');
+    //     }
+    // });
 
 });
