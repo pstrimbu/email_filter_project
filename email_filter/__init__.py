@@ -16,7 +16,7 @@ from .config import Config
 migrate = Migrate()  # Initialize Migrate outside the function
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='static')
     app.config.from_object(Config)  # Load configuration from Config class
 
     # Ensure the instance folder exists
