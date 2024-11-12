@@ -106,6 +106,7 @@ class Result(db.Model):
     log_entry = db.Column(LONGTEXT, nullable=True)
     status = db.Column(db.String(255), nullable=True)
     file_url = db.Column(LONGTEXT, nullable=True)
+    zip_password = db.Column(db.String(255), nullable=True)
 
     user = db.relationship('User', backref='user_results', lazy=True, overlaps="results")
     account = db.relationship('EmailAccount', backref='account_results', lazy=True, overlaps="results")

@@ -17,13 +17,17 @@ import requests
 from requests.exceptions import RequestException
 from email_filter.logger import update_log_entry
 from email_filter.aws import delete_file
+import zipfile
+import random
+import string
+import pyminizip
 
 # Ollama API details
 OLLAMA_API_KEY = "_p0fhuNaCq9H8tS8b5OxtLE5VGieqFY4IrMNp9UUFPc"
 HEADERS = {"x-api-key": OLLAMA_API_KEY, "Content-Type": "application/json"}
 
 
-def process_email_results(user_id, account_id):
+def process_emails(user_id, account_id):
     global OLLAMA_API_URL
     if account_id is None:
         raise ValueError("Account ID cannot be None")
@@ -66,8 +70,14 @@ def process_email_results(user_id, account_id):
         return
 
     try:
-        # Process emails through different stages
-        process_email_addresses(user_id, account_id)
+        # Check if there are any email addresses set to include/exclude
+        has_email_addresses = db.session.query(EmailAddress).filter(
+            EmailAddress.user_id == user_id,
+            EmailAddress.state.in_(['include', 'exclude'])
+        ).count() > 0
+
+        if has_email_addresses:
+            process_email_addresses(user_id, account_id)
     except Exception as e:
         log_entry = f"Error processing email addresses: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
@@ -78,7 +88,11 @@ def process_email_results(user_id, account_id):
     update_log_entry(user_id, account_id, log_entry)
 
     try:
-        process_filters(user_id, account_id)
+        # Check if there are any filters defined
+        has_filters = db.session.query(Filter).filter_by(user_id=user_id, account_id=account_id).count() > 0
+
+        if has_filters:
+            process_filters(user_id, account_id)
     except Exception as e:
         log_entry = f"Error processing filters: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
@@ -89,7 +103,11 @@ def process_email_results(user_id, account_id):
     update_log_entry(user_id, account_id, log_entry)
 
     try:
-        process_prompts(user_id, account_id)
+        # Check if there are any prompts defined
+        has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
+
+        if has_prompts:
+            process_prompts(user_id, account_id)
     except Exception as e:
         log_entry = f"Error processing prompts: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
@@ -366,11 +384,11 @@ def generate_files(user_id, account_id):
     s3_client = boto3.client('s3')
     bucket_name = 'mailmatch'
 
-    # Create a temporary file to store the mbox data
-    with tempfile.NamedTemporaryFile(delete=False) as temp_mbox_file:
-        mbox_path = temp_mbox_file.name
+    # Generate a random password
+    zip_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
 
-    # Open the mbox file for writing
+    # Create the mbox file with the full mbox_filename
+    mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
     mbox = mailbox.mbox(mbox_path, create=True)
     try:
         # Fetch emails in batches of 100
@@ -380,19 +398,32 @@ def generate_files(user_id, account_id):
     finally:
         mbox.close()
 
-    # Upload the mbox file to S3
-    s3_client.upload_file(mbox_path, bucket_name, mbox_filename)
+    # Create a password-protected zip file
+    zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
+    with tempfile.NamedTemporaryFile(delete=False) as temp_zip_file:
+        zip_path = temp_zip_file.name
+        pyminizip.compress(mbox_path, None, zip_path, zip_password, 5)
+
+    # Upload the zip file to S3
+    s3_client.upload_file(zip_path, bucket_name, zip_filename)
 
     # Generate a pre-signed URL valid for 1 month (30 days)
     presigned_url = s3_client.generate_presigned_url('get_object',
-                                                     Params={'Bucket': bucket_name, 'Key': mbox_filename},
+                                                     Params={'Bucket': bucket_name, 'Key': zip_filename},
                                                      ExpiresIn=2592000)  # 30 days in seconds
 
-    # Update the result with the S3 link
-    log_entry = f"Generated mbox file and uploaded to S3. Download link: {presigned_url}"
-    update_log_entry(user_id, account_id, log_entry, status='finished', file_url=presigned_url, name=mbox_filename)
+    # Update the result with the S3 link and password
+    log_entry = f"Generated zip file and uploaded to S3. Download link: {presigned_url}"
+    update_log_entry(user_id, account_id, log_entry, status='finished', file_url=presigned_url, name=zip_filename)
 
-    # Clean up the temporary mbox file
+    # Store the password in the Result model
+    result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
+    if result:
+        result.zip_password = zip_password
+        db.session.commit()
+
+    # Clean up the temporary files
     os.remove(mbox_path)
+    os.remove(zip_path)
 
-    return mbox_filename, presigned_url
+    return zip_filename, presigned_url

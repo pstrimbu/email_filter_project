@@ -45,7 +45,7 @@ class FiltersTagForm(FlaskForm):
 
 class EmailAccountForm(FlaskForm):
     email_address = StringField('Email Address', validators=[DataRequired(), Email()])
-    password = PasswordField('Password', validators=[DataRequired()])
+    password = PasswordField('App Password', validators=[DataRequired()])
     email_type = SelectField('Email Type', choices=[('GMAIL', 'GMAIL'), ('APPLE', 'APPLE')], validators=[DataRequired()])
     imap_server = StringField('IMAP Server', validators=[DataRequired()])
     imap_port = StringField('IMAP Port', validators=[DataRequired()])

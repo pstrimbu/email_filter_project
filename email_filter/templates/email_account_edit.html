@@ -4,20 +4,29 @@
         {{ email_form.hidden_tag() }}
 
         <div class="form-group">
+            {{ email_form.email_type.label(class="form-label", for="emailTypeSelect") }}
+            <select id="emailTypeSelect" name="email_type" class="form-control" onchange="updateImapSettings()">
+                <option value="GMAIL" {% if account.provider == 'GMAIL' %}selected{% endif %}>GMAIL</option>
+                <option value="APPLE" {% if account.provider == 'APPLE' %}selected{% endif %}>APPLE</option>
+            </select>
+        </div>
+
+        <div class="form-group">
             {{ email_form.email_address.label(class="form-label") }} {{ email_form.email_address(class="form-control", value=account.email) }}
         </div>
 
         <div class="form-group">
             {{ email_form.password.label(class="form-label", for=email_form.password.id) }}
             <input type="password" class="form-control" id="passwordField" name="password" placeholder="Enter new password (leave blank to keep current)">
-        </div>
-
-        <div class="form-group">
-            {{ email_form.email_type.label(class="form-label", for="emailTypeSelect") }}
-            <select id="emailTypeSelect" name="email_type" class="form-control" onchange="updateImapSettings()">
-                <option value="GMAIL" {% if account.provider == 'GMAIL' %}selected{% endif %}>GMAIL</option>
-                <option value="APPLE" {% if account.provider == 'APPLE' %}selected{% endif %}>APPLE</option>
-            </select>
+            <small class="form-text text-muted" id="appPasswordHelp">
+                This is not your normal email password. It is an "app-specific password" and needs to be generated.
+                <span id="gmailHelp" style="display: none;">
+                    For GMail accounts go to <a href="https://myaccount.google.com/apppasswords" target="_blank">https://myaccount.google.com/apppasswords</a>, login with your gmail account, then 'create' and enter an "App name" of EmailMatchbox. Copy the resulting "app password" that will look like "hcsn obaf kznh gqfw". This is what you need to enter for your App Password.
+                </span>
+                <span id="appleHelp" style="display: none;">
+                    For Apple (me.com) accounts, go to <a href="https://account.apple.com/" target="_blank">https://account.apple.com/</a>, login with your iCloud account (may need to confirm from another device) and go to "App-Specific Passwords". Click the plus icon, enter EmailMatchbox as the app name (may need to confirm your password), then copy the generated password (looks like "bkde-fxcx-pozc-zbmj"). This is what you need to enter for your App Password.
+                </span>
+            </small>
         </div>
 
         <!-- Hidden fields for IMAP settings -->

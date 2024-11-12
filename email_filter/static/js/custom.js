@@ -546,6 +546,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (this.checked) {
                     // Start live updates
                     liveResultsUpdateInterval = setInterval(() => {
+                        const runningIndicator = document.getElementById('resultsRunningIndicator');
+                        if (!runningIndicator) {
+                            clearInterval(liveResultsUpdateInterval);
+                            console.log('Running indicator not found. stopping live update.');
+                            return;
+                        }
+
                         // Flash the "Live Update" text
                         liveResultsUpdateLabel.classList.add('bold-flash');
                         setTimeout(() => {
@@ -583,7 +590,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(data => {
                         if (data.success) {
                             displayFlashMessage('Results processed successfully!', 'success');
-                            renderProcessEmailResultsView();
+                            // renderProcessEmailResultsView();
+                            simulateClick('process-item');
                         } else {
                             displayFlashMessage('Failed to process results: ' + data.error, 'danger');
                         }
@@ -592,35 +600,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        const resultsFilesList = document.getElementById('resultsFilesList');
-        if (resultsFilesList) {
-            resultsFilesList.addEventListener('click', function(e) {
-                if (e.target.closest('.delete-file-btn')) {
-                    const row = e.target.closest('tr');
-                    const fileId = row.getAttribute('data-file-id');
-                    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
-                    fetch(`/delete_file/${fileId}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': csrfToken
-                            }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                displayFlashMessage('File deleted successfully!', 'success');
-                                row.querySelector('td:first-child').textContent = 'deleted';
-                                row.querySelector('a').remove(); // Remove the download link
-                            } else {
-                                displayFlashMessage('Failed to delete file: ' + data.message, 'danger');
-                            }
-                        })
-                        .catch(error => console.error('Error deleting file:', error));
-                }
-            });
-        }
 
         const limitDatesCheckbox = document.getElementById('limitDates');
         const startDateInput = document.getElementById('start_date');
@@ -650,6 +630,55 @@ document.addEventListener('DOMContentLoaded', function() {
                 endDateInput.removeAttribute('required');
             }
         }
+
+
+        const emailTypeSelect = document.getElementById('emailTypeSelect');
+        const gmailHelp = document.getElementById('gmailHelp');
+        const appleHelp = document.getElementById('appleHelp');
+
+        if (emailTypeSelect) {
+            emailTypeSelect.addEventListener('change', function() {
+                if (this.value === 'GMAIL') {
+                    gmailHelp.style.display = 'inline';
+                    appleHelp.style.display = 'none';
+                } else if (this.value === 'APPLE') {
+                    appleHelp.style.display = 'inline';
+                    gmailHelp.style.display = 'none';
+                } else {
+                    gmailHelp.style.display = 'none';
+                    appleHelp.style.display = 'none';
+                }
+            });
+
+            // Trigger change event to set initial state
+            emailTypeSelect.dispatchEvent(new Event('change'));
+        }
+
+        const resultFileButton = document.getElementById('delete-file-btn');
+        if (resultFileButton) {
+            resultFileButton.addEventListener('click', function() {
+                const fileId = resultFileButton.getAttribute('data-file-id');
+                const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+                fetch(`/delete_file/${fileId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            displayFlashMessage('File deleted successfully!', 'success');
+                            simulateClick('process-item');
+                        } else {
+                            displayFlashMessage('Failed to delete file: ' + data.message, 'danger');
+                        }
+                    })
+                    .catch(error => console.error('Error deleting file:', error));
+            });
+        }
     }
 
     initializeComponents();
@@ -660,7 +689,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderProcessEmailResultsView() {
         const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-        const url = new URL(`/process_email_results_view`, window.location.origin);
+        const url = new URL(`/process_email_results`, window.location.origin);
         url.searchParams.append('account_id', selectedAccountId);
 
         fetch(url, {

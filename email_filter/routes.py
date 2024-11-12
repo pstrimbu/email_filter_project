@@ -9,7 +9,7 @@ from imaplib import IMAP4_SSL
 from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status
-from .export_processor import process_email_results
+from .export_processor import process_emails
 from sqlalchemy import or_, func, and_
 from email_filter.aws import delete_file as aws_delete_file
 
@@ -20,54 +20,69 @@ def init_routes(app):
         flash('Please log in to access this page.', 'warning')
         return redirect(url_for('login', next=request.url))
 
-    @app.route("/process_email_results_view", methods=['GET'])
-    @login_required
-    def process_email_results_view():
-        account_id = request.args.get('account_id')        
-        if not account_id:
-            return jsonify(success=False, message='Account ID is required'), 400
 
-        try:
-            results = Result.query.filter_by(user_id=current_user.id, account_id=account_id).all()
+    @app.route("/process_email_results", methods=['GET', 'POST'])
+    @login_required
+    def process_email_results():
+        if request.method == 'GET':
+            account_id = request.args.get('account_id')
+            if not account_id:
+                return jsonify(success=False, message='Account ID is required'), 400
+
+            try:
+                results = Result.query.filter_by(user_id=current_user.id, account_id=account_id).all()
+                
+                if results:
+                    process_data = {
+                        'status': results[0].status,
+                        'log_entry': results[0].log_entry,
+                        'id': results[0].id,
+                        'name': results[0].name,
+                        'file_url': results[0].file_url,
+                        'zip_password': results[0].zip_password
+                    }
+                else:
+                    process_data = {
+                        'status': 'not started',
+                        'log_entry': '',
+                        'id': '0',
+                        'name': None,
+                        'file_url': None,
+                        'zip_password': None
+                    }
+                return render_template('process.html', process_data=process_data, csrf_form=CSRFTokenForm())
             
-            if results:
-                process_data = {
-                    'status': results[0].status,
-                    'log_entry': results[0].log_entry,
-                    'id': results[0].id,
-                    'name': results[0].name,
-                    'file_url': results[0].file_url
-                }
-            else:                
-                process_data = {
-                    'status': 'not started',
-                    'log_entry': '',
-                    'id': '0',
-                    'name': None,
-                    'file_url': None
-                }
-            return render_template('process.html', process_data=process_data, csrf_form=CSRFTokenForm())
-        
-        except Exception as e:
-            print(f"Error in process_email_results_view: {e}")
-            return jsonify(success=False, message='An internal error occurred'), 500
-    
+            except Exception as e:
+                print(f"Error in process_email_results: {e}")
+                return jsonify(success=False, message='An internal error occurred'), 500
 
-    @app.route('/process_email_results', methods=['POST'])
-    @login_required
-    def process_email_results_route():
-        data = request.get_json()
-        account_id = data.get('account_id')
-        if not account_id:
-            return jsonify(success=False, message='Account ID is required'), 400
+        elif request.method == 'POST':
+            data = request.get_json()
+            account_id = data.get('account_id')
+            if not account_id:
+                return jsonify(success=False, message='Account ID is required'), 400
 
-        try:
-            process_email_results(current_user.id, account_id)
-            results = Result.query.filter_by(user_id=current_user.id, account_id=account_id).all()
-            return jsonify(success=True, result_files=[{'name': result.file_url, 'path': result.file_url} for result in results])
-        except Exception as e:
-            print(f"Error processing email results: {e}")  # Print the error
-            return jsonify(success=False, error="An error occurred while processing email results"), 500
+            try:
+                process_emails(current_user.id, account_id)
+                
+                # Fetch the first result for the user and account
+                result = Result.query.filter_by(user_id=current_user.id, account_id=account_id).first()
+                
+                if result:
+                    process_data = {
+                        'status': result.status,
+                        'log_entry': result.log_entry,
+                        'id': result.id,
+                        'name': result.name,
+                        'file_url': result.file_url,
+                        'zip_password': result.zip_password
+                    }
+                    return jsonify(success=True, process_data=process_data)
+                else:
+                    return jsonify(success=False, message='No result found'), 404
+            except Exception as e:
+                print(f"Error processing email results: {e}")
+                return jsonify(success=False, error="An error occurred while processing email results"), 500
         
    
     @app.route("/register", methods=['GET', 'POST'])
