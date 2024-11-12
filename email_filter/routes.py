@@ -76,6 +76,11 @@ def init_routes(app):
             return redirect(url_for('home'))
         form = RegistrationForm()
         if form.validate_on_submit():
+            invite_code = request.form.get('invite_code')
+            if invite_code != 'ntech':
+                flash('Invalid Invite Code', 'danger')
+                return redirect(url_for('register'))
+            
             hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
             user = User(email=form.email.data, password=hashed_password)
             db.session.add(user)
