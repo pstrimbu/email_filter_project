@@ -11,19 +11,22 @@ from . import bcrypt, db
 from email_filter.globals import scan_status
 from .export_processor import process_emails
 from sqlalchemy import or_, func, and_
-from email_filter.aws import delete_file as aws_delete_file
+from email_filter.aws import SpotInstanceManager
 
 
 def init_routes(app):
+    # Initialize the SpotInstanceManager
+    spot_instance_manager = SpotInstanceManager()
+
     @app.errorhandler(401)
-    def unauthorized(error):
+    async def unauthorized(error):
         flash('Please log in to access this page.', 'warning')
         return redirect(url_for('login', next=request.url))
 
 
     @app.route("/process_email_results", methods=['GET', 'POST'])
     @login_required
-    def process_email_results():
+    async def process_email_results():
         if request.method == 'GET':
             account_id = request.args.get('account_id')
             if not account_id:
@@ -63,7 +66,8 @@ def init_routes(app):
                 return jsonify(success=False, message='Account ID is required'), 400
 
             try:
-                process_emails(current_user.id, account_id)
+                # Await the async process_emails function
+                await process_emails(current_user.id, account_id)
                 
                 # Fetch the first result for the user and account
                 result = Result.query.filter_by(user_id=current_user.id, account_id=account_id).first()
@@ -244,7 +248,6 @@ def init_routes(app):
             db.session.delete(account)
             db.session.commit()
 
-            flash('Email account deleted successfully.', 'success')
             return jsonify(success=True)
         except Exception as e:
             return jsonify(success=False, error=str(e))
@@ -720,5 +723,6 @@ def init_routes(app):
     @app.route('/delete_file/<int:file_id>', methods=['POST'])
     @login_required
     def delete_file(file_id):
-        response, status_code = aws_delete_file(file_id, current_user.id)
+        # Use the SpotInstanceManager instance to delete the file
+        response, status_code = spot_instance_manager.delete_file(file_id, current_user.id)
         return jsonify(response), status_code

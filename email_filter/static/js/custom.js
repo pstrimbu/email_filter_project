@@ -367,8 +367,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Live update logic
         const liveUpdateToggle = document.getElementById('liveUpdateToggle');
         const liveUpdateLabel = document.querySelector('label[for="liveUpdateToggle"]');
+        let liveUpdateInterval;
         if (liveUpdateToggle) {
-            let liveUpdateInterval;
             liveUpdateToggle.addEventListener('change', function() {
                 if (this.checked) {
                     // Start live updates
@@ -394,6 +394,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     liveUpdateLabel.classList.remove('bold-flash'); // Ensure label style is reset
                 }
             });
+        } else {
+            // Stop live updates
+            clearInterval(liveUpdateInterval);
         }
 
         const promptsTableBody = document.getElementById('promptsTableBody');
@@ -536,18 +539,18 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Live Update Toggle Logic
         const liveResultsUpdateToggle = document.getElementById('liveResultsUpdateToggle');
         const liveResultsUpdateLabel = document.querySelector('label[for="liveResultsUpdateToggle"]');
+        const resultsRunningIndicator = document.getElementById('resultsRunningIndicator');
+        const stopResultsButton = document.getElementById('stopResultsButton');
         let liveResultsUpdateInterval;
 
         if (liveResultsUpdateToggle) {
             liveResultsUpdateToggle.addEventListener('change', function() {
-                if (this.checked) {
+                if (liveResultsUpdateToggle.checked) {
                     // Start live updates
                     liveResultsUpdateInterval = setInterval(() => {
-                        const runningIndicator = document.getElementById('resultsRunningIndicator');
-                        if (!runningIndicator) {
+                        if (!resultsRunningIndicator) {
                             clearInterval(liveResultsUpdateInterval);
                             console.log('Running indicator not found. stopping live update.');
                             return;
@@ -561,16 +564,78 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         renderProcessEmailResultsView();
                     }, 5000); // 5 seconds
+
+                    resultsRunningIndicator.style.display = 'inline';
+                    stopResultsButton.style.display = 'inline';
                 } else {
                     // Stop live updates
                     clearInterval(liveResultsUpdateInterval);
                     liveResultsUpdateLabel.classList.remove('bold-flash'); // Ensure label style is reset
+                    resultsRunningIndicator.style.display = 'none';
+                    stopResultsButton.style.display = 'none';
                 }
             });
+        } else {
+            clearInterval(liveResultsUpdateInterval);
+        }
+
+        if (stopResultsButton) {
+            stopResultsButton.addEventListener('click', function() {
+                liveResultsUpdateToggle.checked = false;
+                liveResultsUpdateToggle.dispatchEvent(new Event('change'));
+            });
+        }
+
+        window.addEventListener('beforeunload', function() {
+            clearInterval(liveResultsUpdateInterval);
+        });
+
+        // Ensure interval stops when processing completes
+        function renderProcessEmailResultsView() {
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            const url = new URL(`/process_email_results`, window.location.origin);
+            url.searchParams.append('account_id', selectedAccountId);
+
+            fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
+                })
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const statusElement = doc.querySelector('#processResultsStatus');
+                    const logElement = doc.querySelector('#processResultsLog');
+                    const resultsFilesTable = doc.querySelector('#resultsFilesTable');
+
+                    if (statusElement && logElement) {
+                        const status = statusElement.textContent.trim();
+                        const logEntry = logElement.value.trim();
+
+                        document.getElementById('processResultsStatus').textContent = status;
+                        document.getElementById('processResultsLog').value = logEntry;
+
+                        if (status === 'Status: finished' || status === 'Status: error') {
+                            liveResultsUpdateToggle.checked = false;
+                            liveResultsUpdateToggle.dispatchEvent(new Event('change'));
+                        }
+                    } else {
+                        console.error('Failed to extract process data from HTML.');
+                    }
+                })
+                .catch(error => console.error('Error retrieving process data:', error));
         }
 
         const processResultsButton = document.getElementById('processResultsButton');
         if (processResultsButton) {
+            if (resultsRunningIndicator && resultsRunningIndicator.style.display == 'inline') {
+                processResultsButton.disabled = true; // Disable the button
+            } else {
+                processResultsButton.disabled = false; // Enable the button
+            }
+
             processResultsButton.addEventListener('click', function() {
                 const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
@@ -590,8 +655,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(data => {
                         if (data.success) {
                             displayFlashMessage('Results processed successfully!', 'success');
-                            // renderProcessEmailResultsView();
-                            simulateClick('process-item');
+                            renderProcessEmailResultsView();
+                            // simulateClick('process-item');
                         } else {
                             displayFlashMessage('Failed to process results: ' + data.error, 'danger');
                         }

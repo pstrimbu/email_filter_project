@@ -5,13 +5,14 @@
     <div class="d-flex">
         <div class="d-flex align-items-lg-start">
             <button class="btn btn-danger me-2" id="processResultsButton">Process Results</button>
+            <span id="resultsRunningIndicator" style="display: none;">Running...</span>
+            <button id="stopResultsButton" class="btn btn-sm btn-danger ms-2" style="display: none;">Stop</button>
         </div>
-        <div class="d-flex align-items-lg-end">
-            <div class="form-check form-switch ms-auto">
+        <div class="d-flex align-items-lg-end ms-auto">
+            <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="liveResultsUpdateToggle">
                 <label class="form-check-label" for="liveResultsUpdateToggle">Live Update</label>
             </div>
-            <span id="resultsRunningIndicator" style="display: none;">Running...</span>
         </div>
     </div>
 

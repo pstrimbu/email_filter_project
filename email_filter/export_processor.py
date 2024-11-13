@@ -1,34 +1,35 @@
 from flask import current_app
+from sqlalchemy import text
+from sqlalchemy import or_
 from .models import Email, EmailAddress, Filter, AIPrompt, Result, EmailAccount
 from .extensions import db
+from .aws import SpotInstanceManager, delete_file_from_s3, upload_file_to_s3, generate_presigned_url
+from email_filter.logger import update_log_entry
 import mailbox
 import tempfile
 from datetime import datetime
 import os
-import boto3
-from io import BytesIO
-from dateutil.relativedelta import relativedelta
-from sqlalchemy import text
-from sqlalchemy import or_, func
-from .aws import request_spot_instance, update_last_interaction, check_status, terminate_instance
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from requests.exceptions import RequestException
-from email_filter.logger import update_log_entry
-from email_filter.aws import delete_file
-import zipfile
 import random
 import string
 import pyminizip
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Ollama API details
-OLLAMA_API_KEY = "_p0fhuNaCq9H8tS8b5OxtLE5VGieqFY4IrMNp9UUFPc"
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 HEADERS = {"x-api-key": OLLAMA_API_KEY, "Content-Type": "application/json"}
 
+# Initialize SpotInstanceManager instance
+spot_instance_manager = SpotInstanceManager()
 
-def process_emails(user_id, account_id):
-    global OLLAMA_API_URL
+async def process_emails(user_id, account_id):
     if account_id is None:
         raise ValueError("Account ID cannot be None")
 
@@ -43,7 +44,7 @@ def process_emails(user_id, account_id):
 
     try:
         # Delete existing file from S3
-        delete_file(user_id, account_id)
+        delete_file_from_s3(user_id, account_id)
 
         # Delete existing Result entry for the user and account
         existing_result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
@@ -107,7 +108,7 @@ def process_emails(user_id, account_id):
         has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
 
         if has_prompts:
-            process_prompts(user_id, account_id)
+            await process_prompts(user_id, account_id)
     except Exception as e:
         log_entry = f"Error processing prompts: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
@@ -125,10 +126,11 @@ def process_emails(user_id, account_id):
 
     # Notify AWS that the instance is no longer in use
     try:
-        terminate_instance()
+        spot_instance_manager.terminate_instance()
     except Exception as e:
         log_entry = f"Error terminating instance: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
+
 
 def process_email_addresses(user_id, account_id):
     # Update emails where the sender is included
@@ -196,6 +198,7 @@ def process_email_addresses(user_id, account_id):
     log_entry = f"Email address filter results - Included: {included}, Excluded: {excluded}"
     update_log_entry(user_id, account_id, log_entry)
 
+
 def process_filters(user_id, account_id):
     # Fetch all filters for the user and account
     filters = Filter.query.filter_by(user_id=user_id, account_id=account_id).order_by(Filter.order).all()
@@ -225,10 +228,11 @@ def process_filters(user_id, account_id):
     log_entry = f"Filter results - Included: {total_included}, Excluded: {total_excluded}"
     update_log_entry(user_id, account_id, log_entry)
 
-def process_prompts(user_id, account_id):
+
+async def process_prompts(user_id, account_id):
     # Register with AWS for a spot instance and get the IP address
     try:
-        public_ip = request_spot_instance(user_id, account_id)
+        public_ip = await spot_instance_manager.request_instance(user_id, account_id)
         if not public_ip:
             log_entry = "No public IP address found. Cannot process prompts."
             update_log_entry(user_id, account_id, log_entry, status='error')
@@ -240,12 +244,6 @@ def process_prompts(user_id, account_id):
         log_entry = f"Error requesting spot instance: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
         return
-    
-    # Check if ollama_api_url is not null
-    if not ollama_api_url:
-        log_entry = "OLLAMA_API_URL is null. Cannot process prompts."
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
 
     # Fetch emails with action 'ignore'
     emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').all()
@@ -253,7 +251,7 @@ def process_prompts(user_id, account_id):
     included = 0
     excluded = 0
     ignored = 0
-
+    cant_process = 0
     ai_prompts = AIPrompt.query.filter_by(user_id=user_id, account_id=account_id).order_by(AIPrompt.order).all()
 
     # Use ThreadPoolExecutor to process emails concurrently
@@ -270,17 +268,22 @@ def process_prompts(user_id, account_id):
                 email = future_to_email[future]
                 try:
                     response = future.result()
-                    email.action = 'include' if response else 'exclude'
+                    match response:
+                        case '1': 
+                            email.action = 'include'
+                            included += 1
+                        case '0': 
+                            email.action = 'exclude'
+                            excluded += 1
+                        case _: 
+                            ignored += 1
+                            if "can't" in response:
+                                cant_process += 1
+                            print(f"Unexpected response received for email {email.id}.\n{response[:300]}\n--------------------------------\n")
+                            email.action = 'ignore'
                 except Exception as e:
                     print(f"Error processing email {email.id}: {e}")
                     email.action = 'ignore'
-
-                if email.action == 'include':
-                    included += 1
-                elif email.action == 'exclude':
-                    excluded += 1
-                else:
-                    ignored += 1
 
                 # Time-based logging
                 current_time = time.time()
@@ -298,79 +301,47 @@ def process_prompts(user_id, account_id):
                     last_log_time = current_time
 
     db.session.commit()
-    log_entry = f"Prompts results - Included: {included}, Excluded: {excluded}"
+    log_entry = f"Prompts results - Included: {included}, Excluded: {excluded}, Cant process: {cant_process}"
     update_log_entry(user_id, account_id, log_entry)
 
 def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id):
-    # Check if the API URL is not null
+    """Call Ollama API with retries."""
     if not ollama_api_url:
-        print(f"[ERROR] OLLAMA_API_URL is null for email ID {email.id}")
+        print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
         return False
     
-    # Start timing the API call
     start_time = time.time()
+    spot_instance_manager.update_last_interaction()
 
-    update_last_interaction()
-
-    # Prepare the system prompt
-    MAX_LENGTH = 5000  # Set a limit for the input length
-    email_text = email.text_content  # Use the correct attribute name
-
-    # Truncate the email content if necessary
+    email_text = email.text_content
+    MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))  # Default to 5000 if not set
     email_text = email_text[:MAX_LENGTH] if email_text else ""
 
-    system_prompt = (
-        f"Evaluate the given email content and determine if it explicitly discusses details relevant to the topic provided. "
-        f"If the email content explicitly discusses the topic, respond with exactly '1'. If it does not, respond with '0'. "
-        f"**Respond with only the single digit '0' or '1' ONLY. Provide no other preamble, text, explanation, or analysis.** "
-        f"The topic to consider is: {prompt_text}. "
-        f"The email content is: {email_text}. "
-    )
+    # Load system prompt from environment and format it
+    system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
+    system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
 
-    # Attempt to send the request with retries
     max_retries = 10
     backoff_factor = 0.5
     for attempt in range(max_retries):
-        # Ensure a spot instance is available
-        instance_is_active = check_status()
-        if not instance_is_active:
+        if not spot_instance_manager.check_status():
             log_entry = f"No active instance. Cannot process prompts."
             update_log_entry(user_id, account_id, log_entry, status='error')
             return False
         try:
-            response = requests.post(ollama_api_url, headers=HEADERS, 
-                json={"query": system_prompt, "model": "llama3.2:latest"})
+            response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
             if response.status_code == 200:
-                response_json = response.json()
-                response_value = response_json.get('response', '0')
-
-                try:
-                    content = int(response_value)
-                    # print(f"[DEBUG] response : {response_value} : email {email.text_content[:300]}")
-                except ValueError:
-                    print(f"[ERROR] Received non-numeric response: {response_value[:200]} for email ID {email.id}")
-                    content = 0
-                break  # Exit the loop if the request is successful
-            else:
-                # print(f"[DEBUG] response code : {response.status_code} : email ID {email.id}")
-                content = 0  # Treat errors as no match
+                return response.json().get('response', 'default response')
+            if response.status_code == 500:
+                log_entry = f"AI Server error 500. Retrying in {backoff_factor * (2 ** attempt)} seconds"
+                update_log_entry(user_id, account_id, log_entry)
         except RequestException as e:
-            print(f"Error processing email {email.id}: {e}. waiting {backoff_factor * (2 ** attempt)} seconds before retrying")
-            # Wait before retrying
+            print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
             time.sleep(backoff_factor * (2 ** attempt))
-    else:
-        # If all retries fail, set content to 0
-        content = 0
-
-    # End timing the API call
-    end_time = time.time()
-    api_call_time = end_time - start_time
-    # print(f"Ollama API call time for email {email.id}: {api_call_time:.2f}s")
-
-    return content == 1
+    return 'no response received'
 
 def generate_files(user_id, account_id):
-    # Fetch the email account to get the email address and date range
+    """Generates and uploads email files."""
     email_account = EmailAccount.query.get(account_id)
     if not email_account:
         raise ValueError(f"No EmailAccount found for account_id: {account_id}")
@@ -380,49 +351,33 @@ def generate_files(user_id, account_id):
     timestamp = datetime.now().strftime('%Y%m%d%H%M')
     mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
 
-    # Initialize S3 client
-    s3_client = boto3.client('s3')
-    bucket_name = 'mailmatch'
-
-    # Generate a random password
     zip_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-
-    # Create the mbox file with the full mbox_filename
     mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
     mbox = mailbox.mbox(mbox_path, create=True)
     try:
-        # Fetch emails in batches of 100
         query = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='include')
         for email in query.yield_per(100):
             mbox.add(mailbox.mboxMessage(email.raw_data))
     finally:
         mbox.close()
 
-    # Create a password-protected zip file
     zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
     with tempfile.NamedTemporaryFile(delete=False) as temp_zip_file:
         zip_path = temp_zip_file.name
         pyminizip.compress(mbox_path, None, zip_path, zip_password, 5)
 
-    # Upload the zip file to S3
-    s3_client.upload_file(zip_path, bucket_name, zip_filename)
+    upload_file_to_s3(zip_path, 'mailmatch', zip_filename)
 
-    # Generate a pre-signed URL valid for 1 month (30 days)
-    presigned_url = s3_client.generate_presigned_url('get_object',
-                                                     Params={'Bucket': bucket_name, 'Key': zip_filename},
-                                                     ExpiresIn=2592000)  # 30 days in seconds
+    presigned_url = generate_presigned_url('mailmatch', zip_filename)
 
-    # Update the result with the S3 link and password
     log_entry = f"Generated zip file and uploaded to S3. Download link: {presigned_url}"
     update_log_entry(user_id, account_id, log_entry, status='finished', file_url=presigned_url, name=zip_filename)
 
-    # Store the password in the Result model
     result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
     if result:
         result.zip_password = zip_password
         db.session.commit()
 
-    # Clean up the temporary files
     os.remove(mbox_path)
     os.remove(zip_path)
 

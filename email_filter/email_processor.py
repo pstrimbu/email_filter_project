@@ -263,10 +263,11 @@ def read_imap_emails(account, user_id):
                                     cc_recipients = email_message.get_all('Cc', [])
                                     bcc_recipients = email_message.get_all('Bcc', [])
                                     all_recipients = getaddresses(to_recipients + cc_recipients + bcc_recipients)
-                                    all_recipients_emails = [email[1].lower() for email in all_recipients]
+                                    all_recipients_emails = [email[1].lower() for email in all_recipients if email[1]]
 
                                     # Add sender and recipients to the unique email addresses set
-                                    unique_email_addresses.add(sender_email)
+                                    if sender_email:
+                                        unique_email_addresses.add(sender_email)
                                     unique_email_addresses.update(all_recipients_emails)
 
                                     email_date = parsedate_to_datetime(email_message['Date']).strftime('%Y-%m-%d %H:%M:%S')
