@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('JavaScript loaded successfully');
 
     let selectedAccountId = null; // Global variable to store the selected account ID
+    let liveUpdateInterval; // Global variable to store the live update interval
+    let liveResultsUpdateInterval; // Global variable to store the live results update interval
 
     const contentPane = document.getElementById('contentPane');
     const loadingSpinner = document.getElementById('loadingSpinner');
@@ -295,7 +297,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             displayFlashMessage('Error clearing emails: ' + error, 'danger');
                             console.error('Error clearing emails:', error);
                         });
-
                 }
             });
         }
@@ -304,6 +305,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const scanEmailsButton = document.getElementById('scanEmailsButton');
         if (scanEmailsButton) {
             scanEmailsButton.addEventListener('click', function(e) {
+                scanEmailsButton.disabled = true;
                 e.preventDefault();
 
                 const csrfToken = document.querySelector('input[name="csrf_token"]').value;
@@ -333,6 +335,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     .catch(error => {
                         console.error('Error scanning emails:', error);
                         alert('An error occurred while scanning emails. Please check the console for more details.');
+                    })
+                    .finally(() => {
+                        scanEmailsButton.disabled = false;
                     });
             });
         }
@@ -367,7 +372,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Live update logic
         const liveUpdateToggle = document.getElementById('liveUpdateToggle');
         const liveUpdateLabel = document.querySelector('label[for="liveUpdateToggle"]');
-        let liveUpdateInterval;
         if (liveUpdateToggle) {
             liveUpdateToggle.addEventListener('change', function() {
                 if (this.checked) {
@@ -543,7 +547,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const liveResultsUpdateLabel = document.querySelector('label[for="liveResultsUpdateToggle"]');
         const resultsRunningIndicator = document.getElementById('resultsRunningIndicator');
         const stopResultsButton = document.getElementById('stopResultsButton');
-        let liveResultsUpdateInterval;
+        const processResultsButton = document.getElementById('processResultsButton');
+
+        if (stopResultsButton && resultsRunningIndicator && processResultsButton) {
+            if (resultsRunningIndicator.style.display === 'none') {
+                processResultsButton.disabled = false;
+            } else {
+                processResultsButton.disabled = true;
+            }
+        }
 
         if (liveResultsUpdateToggle) {
             liveResultsUpdateToggle.addEventListener('change', function() {
@@ -562,7 +574,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             liveResultsUpdateLabel.classList.remove('bold-flash');
                         }, 500); // Remove the class after 500ms
 
-                        renderProcessEmailResultsView();
+                        checkProcessEmailResults();
                     }, 5000); // 5 seconds
 
                     resultsRunningIndicator.style.display = 'inline';
@@ -579,67 +591,16 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(liveResultsUpdateInterval);
         }
 
-        if (stopResultsButton) {
-            stopResultsButton.addEventListener('click', function() {
-                liveResultsUpdateToggle.checked = false;
-                liveResultsUpdateToggle.dispatchEvent(new Event('change'));
-            });
-        }
 
         window.addEventListener('beforeunload', function() {
             clearInterval(liveResultsUpdateInterval);
         });
 
-        // Ensure interval stops when processing completes
-        function renderProcessEmailResultsView() {
-            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-            const url = new URL(`/process_email_results`, window.location.origin);
-            url.searchParams.append('account_id', selectedAccountId);
 
-            fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'X-CSRFToken': csrfToken
-                    }
-                })
-                .then(response => response.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const statusElement = doc.querySelector('#processResultsStatus');
-                    const logElement = doc.querySelector('#processResultsLog');
-                    const resultsFilesTable = doc.querySelector('#resultsFilesTable');
-
-                    if (statusElement && logElement) {
-                        const status = statusElement.textContent.trim();
-                        const logEntry = logElement.value.trim();
-
-                        document.getElementById('processResultsStatus').textContent = status;
-                        document.getElementById('processResultsLog').value = logEntry;
-
-                        if (status === 'Status: finished' || status === 'Status: error') {
-                            liveResultsUpdateToggle.checked = false;
-                            liveResultsUpdateToggle.dispatchEvent(new Event('change'));
-                        }
-                    } else {
-                        console.error('Failed to extract process data from HTML.');
-                    }
-                })
-                .catch(error => console.error('Error retrieving process data:', error));
-        }
-
-        const processResultsButton = document.getElementById('processResultsButton');
         if (processResultsButton) {
-            if (resultsRunningIndicator && resultsRunningIndicator.style.display == 'inline') {
-                processResultsButton.disabled = true; // Disable the button
-            } else {
-                processResultsButton.disabled = false; // Enable the button
-            }
-
+            checkProcessEmailResults();
             processResultsButton.addEventListener('click', function() {
-                const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-
-                // Enable Live Update
+                processResultsButton.disabled = true; // Disable the button
                 liveResultsUpdateToggle.checked = true;
                 liveResultsUpdateToggle.dispatchEvent(new Event('change'));
 
@@ -647,25 +608,46 @@ document.addEventListener('DOMContentLoaded', function() {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRFToken': csrfToken
+                            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
                         },
                         body: JSON.stringify({ account_id: selectedAccountId }),
                     })
                     .then(response => response.json())
                     .then(data => {
+                        processResultsButton.disabled = false;
                         if (data.success) {
-                            displayFlashMessage('Results processed successfully!', 'success');
-                            renderProcessEmailResultsView();
-                            // simulateClick('process-item');
+                            // displayFlashMessage('Processing emails...', 'info');
                         } else {
                             displayFlashMessage('Failed to process results: ' + data.error, 'danger');
                         }
                     })
-                    .catch(error => console.error('Error processing emails:', error));
+                    .catch(error => console.error('Error processing emails:', error))
+                    .finally(() => {
+                        processResultsButton.disabled = false;
+                    });
             });
         }
 
-
+        if (stopResultsButton) {
+            stopResultsButton.addEventListener('click', function() {
+                fetch(`/stop_processing/${selectedAccountId}`, { // Include selectedAccountId in the URL path
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            checkProcessEmailResults();
+                        } else {
+                            displayFlashMessage('Failed to stop process: ' + data.error, 'danger');
+                        }
+                    })
+                    .catch(error => console.error('Error stopping process:', error));
+            });
+        }
 
         const limitDatesCheckbox = document.getElementById('limitDates');
         const startDateInput = document.getElementById('start_date');
@@ -736,7 +718,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(data => {
                         if (data.success) {
                             displayFlashMessage('File deleted successfully!', 'success');
-                            simulateClick('process-item');
+                            checkProcessEmailResults();
                         } else {
                             displayFlashMessage('Failed to delete file: ' + data.message, 'danger');
                         }
@@ -751,8 +733,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
-
-    function renderProcessEmailResultsView() {
+    // Check if the process email results are finished or error
+    function checkProcessEmailResults() {
         const csrfToken = document.querySelector('input[name="csrf_token"]').value;
         const url = new URL(`/process_email_results`, window.location.origin);
         url.searchParams.append('account_id', selectedAccountId);
@@ -763,38 +745,52 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-CSRFToken': csrfToken
                 }
             })
-            .then(response => response.text()) // Use response.text() to get the HTML
+            .then(response => response.text())
             .then(html => {
-                // Create a temporary DOM element to parse the HTML
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-
-                // Extract the necessary elements from the parsed HTML
                 const statusElement = doc.querySelector('#processResultsStatus');
                 const logElement = doc.querySelector('#processResultsLog');
-                const resultsFilesTable = doc.querySelector('#resultsFilesTable');
+
+                const liveResultsUpdateToggle = document.getElementById('liveResultsUpdateToggle');
+                const resultsRunningIndicator = document.getElementById('resultsRunningIndicator');
+                const stopResultsButton = document.getElementById('stopResultsButton');
+                const processResultsButton = document.getElementById('processResultsButton');
 
                 if (statusElement && logElement) {
                     const status = statusElement.textContent.trim();
                     const logEntry = logElement.value.trim();
 
-                    // Update the current page with the extracted information
-                    document.getElementById('processResultsStatus').textContent = status;
-                    document.getElementById('processResultsLog').value = logEntry;
+                    const currentStatusElement = document.getElementById('processResultsStatus');
+                    const currentLogElement = document.getElementById('processResultsLog');
+                    const stopResultsButton = document.getElementById('stopResultsButton');
+
+                    if (currentStatusElement && currentLogElement) {
+                        currentStatusElement.textContent = status;
+                        currentLogElement.value = logEntry;
+                    } else {
+                        console.error('Process results elements not found in the current document.');
+                    }
 
                     if (status === 'Status: finished' || status === 'Status: error') {
-                        // Disable Live Update
+                        resultsRunningIndicator.style.display = 'none';
+                        stopResultsButton.style.display = 'none';
+                        processResultsButton.disabled = false;
                         liveResultsUpdateToggle.checked = false;
                         liveResultsUpdateToggle.dispatchEvent(new Event('change'));
-
-                        if (resultsFilesTable && resultsFilesTable.querySelector('tbody').children.length > 0) {
-                            resultsFilesTable.style.display = 'table';
-                        } else {
-                            resultsFilesTable.style.display = 'none';
-                        }
                     } else {
-                        resultsFilesTable.style.display = 'none';
+                        resultsRunningIndicator.style.display = 'inline';
+                        stopResultsButton.style.display = 'inline';
+                        processResultsButton.disabled = true;
                     }
+
+                    if (status === 'Status: stopping') {
+                        resultsRunningIndicator.textContent = 'Stopping...';
+                        // stopResultsButton.disabled = true;
+                    } else {
+                        // stopResultsButton.disabled = false;
+                    }
+
                 } else {
                     console.error('Failed to extract process data from HTML.');
                 }
@@ -1247,6 +1243,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } else {
                     if (runningIndicator) {
+                        clearInterval(liveUpdateInterval);
                         runningIndicator.style.display = 'none';
                         stopButton.style.display = 'none';
                         // Disable live update toggle

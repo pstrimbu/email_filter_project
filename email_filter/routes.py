@@ -1,17 +1,18 @@
+import os
 from flask import render_template, url_for, flash, redirect, request, jsonify, send_from_directory
 from flask_login import login_user, current_user, logout_user, login_required
 from .forms import RegistrationForm, LoginForm, EmailAccountForm, CSRFTokenForm, JobForm
 from .models import Filter, EmailAccount, EmailAddress, User, Email, EmailFolder, AIPrompt, Result
 from datetime import datetime
 from .email_processor import read_imap_emails
-from poplib import POP3_SSL, POP3
 from imaplib import IMAP4_SSL
 from email.policy import default
 from . import bcrypt, db
-from email_filter.globals import scan_status
-from .export_processor import process_emails
+from email_filter.globals import scan_status, processing_status
+from email_filter.logger import update_log_entry
+from .export_processor import process_emails, start_monitoring_thread
 from sqlalchemy import or_, func, and_
-from email_filter.aws import SpotInstanceManager
+from email_filter.aws import SpotInstanceManager, delete_file_from_s3
 
 
 def init_routes(app):
@@ -320,42 +321,6 @@ def init_routes(app):
 
         return read_imap_emails(email_account, current_user.id)
 
-
-    # @app.route('/get_email_addresses/<int:account_id>', methods=['GET'])
-    # @login_required
-    # def get_email_addresses(account_id):
-    #     # Ensure the account belongs to the current user
-    #     account = EmailAccount.query.get_or_404(account_id)
-    #     if account.user_id != current_user.id:
-    #         return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
-
-    #     # Query unique email addresses and their counts
-    #     email_addresses = db.session.query(
-    #         Email.sender,
-    #         db.func.count(Email.id).label('count')
-    #     ).filter_by(account_id=account_id).group_by(Email.sender).order_by(db.desc('count')).all()
-
-    #     # Format the response
-    #     response = [{'email': email.sender, 'count': email.count} for email in email_addresses]
-    #     return jsonify({'success': True, 'email_addresses': response})
-
-    # @app.route('/update_email_action/<int:email_id>', methods=['POST'])
-    # @login_required
-    # def update_email_action(email_id):
-    #     data = request.json
-    #     action = data.get('action')
-
-    #     if action not in ['include', 'ignore', 'exclude']:
-    #         return jsonify({'success': False, 'message': 'Invalid action'}), 400
-
-    #     email = Emails.query.get_or_404(email_id)
-    #     if email.user_id != current_user.id:
-    #         return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
-
-    #     email.action = action
-    #     db.session.commit()
-
-    #     return jsonify({'success': True, 'message': 'Email action updated successfully'})
 
     def test_email_connection_logic(email_address, password, email_type, server=None, port=None, use_ssl=None):
         try:
@@ -720,9 +685,25 @@ def init_routes(app):
 
         return jsonify({'success': True, 'message': 'Prompt action updated successfully'})
 
-    @app.route('/delete_file/<int:file_id>', methods=['POST'])
+    @app.route('/delete_file/<int:file_key>', methods=['POST'])
     @login_required
-    def delete_file(file_id):
-        # Use the SpotInstanceManager instance to delete the file
-        response, status_code = spot_instance_manager.delete_file(file_id, current_user.id)
-        return jsonify(response), status_code
+    def delete_file(file_key):
+        bucket_name = os.getenv('S3_BUCKET_NAME')
+        if delete_file_from_s3('mailmatch', file_key):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to delete file from S3'})
+       
+    @app.route('/check_processing_status/<int:account_id>', methods=['GET'])
+    @login_required
+    def check_processing_status(account_id):
+        status = processing_status.get((current_user.id, account_id), 'stopped')
+        return jsonify({'status': status})
+
+    @app.route('/stop_processing/<int:account_id>', methods=['POST'])
+    @login_required
+    def stop_processing(account_id):
+        start_monitoring_thread(current_user.id, account_id) # this triggers the export_processor.py to exit the while true loop
+        processing_status[(current_user.id, account_id)] = 'stopping' # this triggers the export_processor.py to exit the while true loop
+        update_log_entry(current_user.id, account_id, 'Stopping...', status='stopping')
+        return jsonify({'success': True})

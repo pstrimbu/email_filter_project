@@ -1,12 +1,11 @@
 import os
 from flask import Flask
 from flask_wtf import CSRFProtect
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from .extensions import db, bcrypt, login_manager
-from .models import User, AIPrompt
+from .models import User
 from .config import Config
 
 

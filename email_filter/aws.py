@@ -8,12 +8,91 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
 from email_filter.logger import update_log_entry
+from email_filter.globals import processing_status
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
+
+
+class InstanceManager:
+    def __init__(self):
+        self.region = os.getenv("AWS_REGION", "us-east-1")
+        self.instance_id = os.getenv("INSTANCE_ID")
+        self.processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+        self.session = boto3.Session(profile_name="amplify-app", region_name=self.region)
+        self.ec2_client = self.session.client("ec2")
+        self.interaction_lock = Lock()
+        self.active_users = set()
+        self.last_interaction = None
+        self.timeout_minutes = 5
+
+    async def manage_instance(self):
+        if self.processor_type == "instance":
+            await self._use_on_demand_instance()
+        else:
+            # Use existing SpotInstanceManager logic
+            pass
+
+    async def request_instance(self, user_id, account_id):
+        try:
+            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+            state = response['Reservations'][0]['Instances'][0]['State']['Name']
+            if state == 'stopped':
+                self.ec2_client.start_instances(InstanceIds=[self.instance_id])
+                await self._wait_for_instance_ready(user_id, account_id)
+            elif state != 'running':
+                await self._wait_for_instance_ready(user_id, account_id)
+            
+            # Retrieve the public IP address
+            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+            public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
+            if public_ip:
+                logging.info(f"Instance {self.instance_id} has public IP: {public_ip}")
+                return public_ip
+            else:
+                logging.error(f"Public IP not available for instance {self.instance_id}.")
+                return None
+        except ClientError as e:
+            logging.error(f"Error managing on-demand instance: {e}")
+            return None
+
+    async def _wait_for_instance_ready(self, user_id, account_id):
+        last_logged_time = datetime.now() - timedelta(seconds=30)  # Initialize to ensure immediate logging
+        while True:
+            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+            state = response['Reservations'][0]['Instances'][0]['State']['Name']
+            instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
+            status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
+
+            current_time = datetime.now()
+            if (current_time - last_logged_time).total_seconds() >= 30:
+                # Log the current state every 30 seconds
+                update_log_entry(user_id, account_id, f"Waiting for AI Server to be ready. Current state: {state}, Status: {status}")
+                last_logged_time = current_time
+
+            if state == 'running' and status == 'ok':
+                logging.info(f"Instance {self.instance_id} is now running and ready for requests.")
+                break
+            await asyncio.sleep(5)  # Adjusted to 5 seconds
+
+    def terminate_instance(self):
+        try:
+            self.ec2_client.stop_instances(InstanceIds=[self.instance_id])
+            logging.info(f"Instance {self.instance_id} stopped.")
+        except ClientError as e:
+            logging.error(f"Error stopping instance: {e}")
+
+    async def monitor_instance_status(self):
+        await monitor_instance_status(self)
+
+    def update_last_interaction(self):
+        """Update the last interaction timestamp."""
+        with self.interaction_lock:
+            self.last_interaction = datetime.now()
+
 
 class SpotInstanceManager:
     def __init__(self):
@@ -87,7 +166,7 @@ class SpotInstanceManager:
             # Request a new spot instance
             update_log_entry(user_id, account_id, "Requesting new AI Server.")
             try:
-                response = await self._request_spot_instance()
+                response = await self._request_spot_instance(user_id, account_id)
                 self.spot_request_id = response["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
                 update_log_entry(user_id, account_id, f"AI Server requested with ID: {self.spot_request_id}")
                 return await self._wait_for_instance_launch(user_id, account_id)
@@ -95,9 +174,12 @@ class SpotInstanceManager:
                 update_log_entry(user_id, account_id, f"Error requesting spot instance: {e}", status='error')
                 return None
 
-    async def _request_spot_instance(self):
+    async def _request_spot_instance(self, user_id, account_id):
+        global processing_status
         """Request a new spot instance with retries."""
-        for attempt in range(5):
+        for attempt in range(20):
+            if processing_status.get((user_id, account_id)) == 'stopping':
+                return None
             try:
                 return self.ec2_client.request_spot_instances(
                     SpotPrice=self.spot_price,
@@ -121,8 +203,11 @@ class SpotInstanceManager:
         raise ClientError("Failed to request spot instance after multiple attempts.")
 
     async def _wait_for_instance_launch(self, user_id, account_id):
+        global processing_status
         """Wait for the spot instance to launch, then retrieve the public IP."""
-        for attempt in range(12):
+        for attempt in range(20):
+            if processing_status.get((user_id, account_id)) == 'stopping':
+                return None
             try:
                 result = self.ec2_client.describe_spot_instance_requests(SpotInstanceRequestIds=[self.spot_request_id])
                 instance_id = result["SpotInstanceRequests"][0].get("InstanceId")
@@ -180,29 +265,29 @@ class SpotInstanceManager:
                     self.log(f"Error terminating instance: {e}")
 
     async def monitor_instance_status(self):
-        """Asynchronous monitoring of instance for inactivity or max runtime."""
-        while True:
-            await asyncio.sleep(10)
-            with self.interaction_lock:
-                if self.instance_id:
-                    now = datetime.now()
-                    if self.last_interaction and now - self.last_interaction > timedelta(minutes=self.timeout_minutes):
-                        self.log("Instance inactive. Terminating due to timeout.")
-                        self.terminate_instance()
-                    elif self.instance_launch_time and now - self.instance_launch_time > timedelta(minutes=self.max_runtime_minutes):
-                        self.log("Instance reached max runtime. Terminating.")
-                        self.terminate_instance()
+        await monitor_instance_status(self)
 
-def delete_file_from_s3(user_id, account_id, bucket_name='mailmatch'):
+
+async def monitor_instance_status(manager):
+    """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
+    while True:
+        await asyncio.sleep(300)  # Check every 5 minutes
+        with manager.interaction_lock:
+            if manager.instance_id and not manager.active_users:
+                manager.log("No active users. Stopping instance.")
+                manager.stop_instance()
+
+
+def delete_file_from_s3(bucket_name='mailmatch', file_key=None):
     """Delete a file from S3 for the given user and account."""
     try:
         s3_client = boto3.client('s3')
-        file_key = f"{user_id}/{account_id}/file_to_delete"  # Update with actual file key logic
         s3_client.delete_object(Bucket=bucket_name, Key=file_key)
         logging.info(f"Deleted file {file_key} from bucket {bucket_name}.")
+        return True
     except ClientError as e:
-        logging.error(f"Error deleting file from S3: {e}")
-        raise
+        logging.error(f"Error deleting {file_key} from S3 bucket {bucket_name}: {e}")
+        return False
 
 def upload_file_to_s3(file_path, bucket_name, file_key):
     """Upload a file to S3."""
@@ -226,3 +311,5 @@ def generate_presigned_url(bucket_name, file_key, expiration=2592000):
     except ClientError as e:
         logging.error(f"Error generating presigned URL: {e}")
         raise
+
+

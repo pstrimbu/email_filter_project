@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy import or_
 from .models import Email, EmailAddress, Filter, AIPrompt, Result, EmailAccount
 from .extensions import db
-from .aws import SpotInstanceManager, delete_file_from_s3, upload_file_to_s3, generate_presigned_url
+from .aws import SpotInstanceManager, InstanceManager, delete_file_from_s3, upload_file_to_s3, generate_presigned_url
 from email_filter.logger import update_log_entry
 import mailbox
 import tempfile
@@ -17,6 +17,8 @@ import random
 import string
 import pyminizip
 from dotenv import load_dotenv
+from email_filter.globals import processing_status
+import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,11 +30,108 @@ HEADERS = {"x-api-key": OLLAMA_API_KEY, "Content-Type": "application/json"}
 
 # Initialize SpotInstanceManager instance
 spot_instance_manager = SpotInstanceManager()
+instance_manager = InstanceManager()
+
+# Global variable to keep track of the monitoring thread
+monitoring_thread = None
+
+def start_monitoring_thread(user_id, account_id):
+    global monitoring_thread
+    if monitoring_thread is None or not monitoring_thread.is_alive():
+        # Capture the current app context
+        app_context = current_app._get_current_object()
+        monitoring_thread = threading.Thread(target=monitor_threads, args=(user_id, account_id, app_context))
+        monitoring_thread.start()
+
+def monitor_threads(user_id, account_id, app_context):
+    global processing_status
+    with app_context.app_context():  # Use the passed app context
+        last_log_time = time.time()
+        log_interval = 30  # Log every 30 seconds
+
+        while True:
+            # Check if there are any active threads
+            active_threads = [t for t in threading.enumerate() if t.name.startswith('ThreadPoolExecutor')]
+            num_active_threads = len(active_threads)
+
+            # Log the number of active threads every 30 seconds
+            current_time = time.time()
+            if current_time - last_log_time >= log_interval:
+                log_entry = f"Active AI request threads: {num_active_threads}"
+                update_log_entry(user_id, account_id, log_entry, status='processing')
+                last_log_time = current_time
+
+            if not active_threads:
+                update_log_entry(user_id, account_id, "All threads finished", status='finished')
+                processing_status[(user_id, account_id)] = 'finished'
+                break
+
+            time.sleep(5)  # Check every 5 seconds
 
 async def process_emails(user_id, account_id):
-    if account_id is None:
-        raise ValueError("Account ID cannot be None")
+    global processing_status
+    try:
+        if account_id is None:
+            raise ValueError("Account ID cannot be None")
 
+        processing_status[(user_id, account_id)] = 'running'
+
+        # Start the monitoring thread
+        start_monitoring_thread(user_id, account_id)
+
+        # Delete previous results
+        preprocess_cleanup(user_id, account_id)
+
+        update_log_entry(user_id, account_id, 'Processing started', status='started')
+
+        # LOG TOTAL EMAILS
+        try:
+            # Get the count of all emails for the user and account
+            total_emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id).count()
+            
+            # Initialize log entry
+            log_entry = f"Total emails found: {total_emails}"
+            update_log_entry(user_id, account_id, log_entry, status='processing')
+        except Exception as e:
+            log_entry = f"Error fetching email count: {e}"
+            update_log_entry(user_id, account_id, log_entry, status='error')
+            return
+
+        process_email_addresses(user_id, account_id)
+
+        if processing_status.get((user_id, account_id)) == 'stopping':
+            return {'success': False, 'error': 'stopped by user request'}
+
+        process_filters(user_id, account_id)
+
+        if processing_status.get((user_id, account_id)) == 'stopping':
+            return {'success': False, 'error': 'stopped by user request'}
+
+        await process_prompts(user_id, account_id)
+
+        if processing_status.get((user_id, account_id)) == 'stopping':
+            return {'success': False, 'error': 'stopped by user request'}
+        
+        try:
+            # Generate files and get the mbox filename and presigned URL
+            mbox_filename, presigned_url = generate_files(user_id, account_id)
+            result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
+            if result:
+                result.name = mbox_filename
+                result.file_url = presigned_url
+                result.status = 'finished'
+                result.log_entry = result.log_entry + '\nProcessing finished'
+                db.session.add(result)
+            db.session.commit()
+        except Exception as e:
+            log_entry = f"Error generating files: {e}"
+            update_log_entry(user_id, account_id, log_entry, status='error')
+            return
+    finally:
+        processing_status[(user_id, account_id)] = 'finished'
+
+
+def preprocess_cleanup(user_id, account_id):
     try:
         # Set all emails to 'ignore' before processing
         db.session.query(Email).filter_by(user_id=user_id, account_id=account_id).update({'action': 'ignore'}, synchronize_session=False)
@@ -43,96 +142,35 @@ async def process_emails(user_id, account_id):
         return
 
     try:
-        # Delete existing file from S3
-        delete_file_from_s3(user_id, account_id)
 
         # Delete existing Result entry for the user and account
-        existing_result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
-        if existing_result:
-            db.session.delete(existing_result)
+        existing_results = Result.query.filter_by(user_id=user_id, account_id=account_id)
+        if existing_results:
+            for result in existing_results:
+                if result.name:
+                    bucket_name = os.getenv("S3_BUCKET_NAME")
+                    # Delete existing file from S3
+                    delete_file_from_s3(bucket_name, result.name)
+
+                # delete the result entry
+                db.session.delete(result)
             db.session.commit()        
     except Exception as e:
         log_entry = f"Error deleting existing results: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
         return
 
-    update_log_entry(user_id, account_id, 'Processing started', status='started')
-
-    try:
-        # Get the count of all emails for the user and account
-        total_emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id).count()
-        
-        # Initialize log entry
-        log_entry = f"Total emails found: {total_emails}"
-        update_log_entry(user_id, account_id, log_entry, status='processing')
-    except Exception as e:
-        log_entry = f"Error fetching email count: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    try:
-        # Check if there are any email addresses set to include/exclude
-        has_email_addresses = db.session.query(EmailAddress).filter(
-            EmailAddress.user_id == user_id,
-            EmailAddress.state.in_(['include', 'exclude'])
-        ).count() > 0
-
-        if has_email_addresses:
-            process_email_addresses(user_id, account_id)
-    except Exception as e:
-        log_entry = f"Error processing email addresses: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
-    log_entry = f"Remaining: {ignored}"
-    update_log_entry(user_id, account_id, log_entry)
-
-    try:
-        # Check if there are any filters defined
-        has_filters = db.session.query(Filter).filter_by(user_id=user_id, account_id=account_id).count() > 0
-
-        if has_filters:
-            process_filters(user_id, account_id)
-    except Exception as e:
-        log_entry = f"Error processing filters: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
-    log_entry = f"Remaining: {ignored}"
-    update_log_entry(user_id, account_id, log_entry)
-
-    try:
-        # Check if there are any prompts defined
-        has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
-
-        if has_prompts:
-            await process_prompts(user_id, account_id)
-    except Exception as e:
-        log_entry = f"Error processing prompts: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    try:
-        # Generate files and get the mbox filename and presigned URL
-        mbox_filename, presigned_url = generate_files(user_id, account_id)
-    except Exception as e:
-        log_entry = f"Error generating files: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    update_log_entry(user_id, account_id, 'Processing finished', status='finished', file_url=presigned_url, name=mbox_filename)
-
-    # Notify AWS that the instance is no longer in use
-    try:
-        spot_instance_manager.terminate_instance()
-    except Exception as e:
-        log_entry = f"Error terminating instance: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-
 
 def process_email_addresses(user_id, account_id):
+    # Check if there are any email addresses set to include/exclude
+    has_email_addresses = db.session.query(EmailAddress).filter(
+        EmailAddress.user_id == user_id,
+        EmailAddress.state.in_(['include', 'exclude'])
+    ).count() > 0
+
+    if not has_email_addresses:
+        return
+    
     # Update emails where the sender is included
     result_included = db.session.query(Email).filter(
         Email.user_id == user_id,
@@ -198,8 +236,18 @@ def process_email_addresses(user_id, account_id):
     log_entry = f"Email address filter results - Included: {included}, Excluded: {excluded}"
     update_log_entry(user_id, account_id, log_entry)
 
+    ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
+    log_entry = f"Remaining: {ignored}"
+    update_log_entry(user_id, account_id, log_entry)
+
 
 def process_filters(user_id, account_id):
+
+    # Check if there are any filters defined
+    has_filters = db.session.query(Filter).filter_by(user_id=user_id, account_id=account_id).count() > 0
+    if not has_filters:
+        return
+
     # Fetch all filters for the user and account
     filters = Filter.query.filter_by(user_id=user_id, account_id=account_id).order_by(Filter.order).all()
 
@@ -228,102 +276,138 @@ def process_filters(user_id, account_id):
     log_entry = f"Filter results - Included: {total_included}, Excluded: {total_excluded}"
     update_log_entry(user_id, account_id, log_entry)
 
-
-async def process_prompts(user_id, account_id):
-    # Register with AWS for a spot instance and get the IP address
-    try:
-        public_ip = await spot_instance_manager.request_instance(user_id, account_id)
-        if not public_ip:
-            log_entry = "No public IP address found. Cannot process prompts."
-            update_log_entry(user_id, account_id, log_entry, status='error')
-            return
-        ollama_api_url = f"http://{public_ip}:5000/api"  # Use the IP address to form the URL
-        log_entry = f"AI Server active. Processing prompts..."
-        update_log_entry(user_id, account_id, log_entry, status='processing')
-    except Exception as e:
-        log_entry = f"Error requesting spot instance: {e}"
-        update_log_entry(user_id, account_id, log_entry, status='error')
-        return
-
-    # Fetch emails with action 'ignore'
-    emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').all()
-
-    included = 0
-    excluded = 0
-    ignored = 0
-    cant_process = 0
-    ai_prompts = AIPrompt.query.filter_by(user_id=user_id, account_id=account_id).order_by(AIPrompt.order).all()
-
-    # Use ThreadPoolExecutor to process emails concurrently
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        with current_app.app_context(): 
-            future_to_email = {executor.submit(call_ollama_api, prompt.prompt_text, email, ollama_api_url, user_id, account_id): email for prompt in ai_prompts for email in emails}
-
-            start_time = time.time()
-            total_emails = len(future_to_email)
-            last_log_time = start_time
-            log_interval = 10  # Log every 10 seconds
-
-            for future in as_completed(future_to_email):
-                email = future_to_email[future]
-                try:
-                    response = future.result()
-                    match response:
-                        case '1': 
-                            email.action = 'include'
-                            included += 1
-                        case '0': 
-                            email.action = 'exclude'
-                            excluded += 1
-                        case _: 
-                            ignored += 1
-                            if "can't" in response:
-                                cant_process += 1
-                            print(f"Unexpected response received for email {email.id}.\n{response[:300]}\n--------------------------------\n")
-                            email.action = 'ignore'
-                except Exception as e:
-                    print(f"Error processing email {email.id}: {e}")
-                    email.action = 'ignore'
-
-                # Time-based logging
-                current_time = time.time()
-                if current_time - last_log_time >= log_interval:
-                    elapsed_time = current_time - start_time
-                    processed = included + excluded + ignored
-                    average_time = elapsed_time / processed
-                    remaining = total_emails - processed
-                    projected_remaining_time = average_time * remaining
-
-                    log_entry = (f"Processed {processed}/{total_emails} emails - "
-                                f"Included: {included}, Excluded: {excluded}, Remaining: {remaining}, "
-                                f"Projected remaining time: {projected_remaining_time:.2f}s")
-                    update_log_entry(user_id, account_id, log_entry)
-                    last_log_time = current_time
-
-    db.session.commit()
-    log_entry = f"Prompts results - Included: {included}, Excluded: {excluded}, Cant process: {cant_process}"
+    ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
+    log_entry = f"Remaining: {ignored}"
     update_log_entry(user_id, account_id, log_entry)
 
+
+async def process_prompts(user_id, account_id):
+    global processing_status
+    # Check if there are any prompts defined
+    has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
+    if not has_prompts:
+        return
+
+    try:
+        # Register with AWS for a spot instance and get the IP address
+        try:
+            processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+            if processor_type == "spot":
+                public_ip = await spot_instance_manager.request_instance(user_id, account_id)
+            else:
+                public_ip = await instance_manager.request_instance(user_id, account_id)
+            if not public_ip:
+                log_entry = "No public IP address found. Cannot process prompts."
+                update_log_entry(user_id, account_id, log_entry, status='error')
+                return
+            ollama_api_url = f"http://{public_ip}:5000/api"  # Use the IP address to form the URL
+            log_entry = f"AI Server active. Processing prompts..."
+            update_log_entry(user_id, account_id, log_entry, status='processing')
+        except Exception as e:
+            log_entry = f"Error requesting instance: {e}"
+            update_log_entry(user_id, account_id, log_entry, status='error')
+            return
+
+        # Fetch emails with action 'ignore'
+        emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').all()
+
+        included = 0
+        excluded = 0
+        ignored = 0
+        cant_process = 0
+        ai_prompts = AIPrompt.query.filter_by(user_id=user_id, account_id=account_id).order_by(AIPrompt.order).all()
+
+        # Use ThreadPoolExecutor to process emails concurrently
+        with ThreadPoolExecutor(max_workers=5) as executor:        
+            with current_app.app_context():
+                future_to_email = {executor.submit(call_ollama_api, prompt.prompt_text, email, ollama_api_url, user_id, account_id): email for prompt in ai_prompts for email in emails}
+
+                start_time = time.time()
+                total_emails = len(future_to_email)
+                last_log_time = start_time
+                log_interval = 10  # Log every 10 seconds
+
+                for future in as_completed(future_to_email):
+                    if processing_status.get((user_id, account_id)) == 'stopping':
+                        return {'success': False, 'error': 'stopped by user request'}
+
+                    email = future_to_email[future]
+                    try:
+                        response = future.result()
+                        match response:
+                            case '1': 
+                                email.action = 'include'
+                                included += 1
+                            case '0': 
+                                email.action = 'exclude'
+                                excluded += 1
+                            case _: 
+                                ignored += 1
+                                if "can't" in response:
+                                    cant_process += 1
+                                print(f"Unexpected response received for email {email.id}.\n{response[:300]}\n--------------------------------\n")
+                                email.action = 'ignore'
+                    except Exception as e:
+                        print(f"Error processing email {email.id}: {e}")
+                        email.action = 'ignore'
+
+                    # Time-based logging
+                    current_time = time.time()
+                    if current_time - last_log_time >= log_interval:
+                        elapsed_time = current_time - start_time
+                        processed = included + excluded + ignored
+                        average_time = elapsed_time / processed
+                        remaining = total_emails - processed
+                        projected_remaining_time = average_time * remaining
+
+                        log_entry = (f"Processed {processed}/{total_emails} emails - "
+                                    f"Included: {included}, Excluded: {excluded}, Remaining: {remaining}, "
+                                    f"Projected remaining time: {projected_remaining_time:.2f}s")
+                        update_log_entry(user_id, account_id, log_entry)
+                        last_log_time = current_time
+
+        db.session.commit()
+        log_entry = f"Prompts results - Included: {included}, Excluded: {excluded}, Cant process: {cant_process}"
+        update_log_entry(user_id, account_id, log_entry)
+    finally:
+        # Notify AWS that the instance is no longer in use
+        try:
+            processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+            if processor_type == "spot":
+                spot_instance_manager.terminate_instance(user_id)
+            else:
+                instance_manager.terminate_instance(user_id)
+        except Exception as e:
+            log_entry = f"Error terminating instance: {e}"
+            update_log_entry(user_id, account_id, log_entry, status='error terminating instance')
+
+
 def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id):
+    global processing_status
     """Call Ollama API with retries."""
     if not ollama_api_url:
         print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
         return False
     
-    start_time = time.time()
-    spot_instance_manager.update_last_interaction()
+    processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+    if processor_type == "spot":
+        spot_instance_manager.update_last_interaction()
+    else:
+        instance_manager.update_last_interaction()
 
     email_text = email.text_content
     MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))  # Default to 5000 if not set
     email_text = email_text[:MAX_LENGTH] if email_text else ""
 
-    # Load system prompt from environment and format it
     system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
     system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
 
     max_retries = 10
     backoff_factor = 0.5
     for attempt in range(max_retries):
+        if processing_status.get((user_id, account_id)) == 'stopping':
+            return False
+        
         if not spot_instance_manager.check_status():
             log_entry = f"No active instance. Cannot process prompts."
             update_log_entry(user_id, account_id, log_entry, status='error')
@@ -370,12 +454,14 @@ def generate_files(user_id, account_id):
 
     presigned_url = generate_presigned_url('mailmatch', zip_filename)
 
-    log_entry = f"Generated zip file and uploaded to S3. Download link: {presigned_url}"
-    update_log_entry(user_id, account_id, log_entry, status='finished', file_url=presigned_url, name=zip_filename)
+    log_entry = f"Generated zip file and uploaded to S3."
+    update_log_entry(user_id, account_id, log_entry, status='finished')
 
     result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
     if result:
         result.zip_password = zip_password
+        result.file_url = presigned_url
+        result.name = zip_filename
         db.session.commit()
 
     os.remove(mbox_path)
