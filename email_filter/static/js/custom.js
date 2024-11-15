@@ -620,11 +620,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
                         },
-                        body: JSON.stringify({ account_id: selectedAccountId }),
+                        body: JSON.stringify({ account_id: selectedAccountId })
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
+                            // reload when process is done
                             simulateClick('process-item');
                         } else {
                             displayFlashMessage('Failed to process results: ' + data.error, 'danger');

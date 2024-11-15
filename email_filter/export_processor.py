@@ -416,7 +416,7 @@ def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app
         system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
         system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
 
-        max_retries = 10
+        max_retries = 20
         backoff_factor = 0.5
         for attempt in range(max_retries):
             if processing_status.get((user_id, account_id)) == 'stopping':
@@ -425,21 +425,21 @@ def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app
             processor_type = os.getenv("PROCESSOR_TYPE", "spot")
             if processor_type == "spot":
                 if not spot_instance_manager.check_status():
-                    log_entry = f"No active instance. Cannot process prompts."
-                    update_log_entry(user_id, account_id, log_entry, status='error')
-                    return False
+                    print(f"No active instance. waiting for instance to start.")
+                    time.sleep(backoff_factor * (2 ** attempt))
+                    continue
             else:
                 if not instance_manager.check_status():
-                    log_entry = f"No active instance. Cannot process prompts."
-                    update_log_entry(user_id, account_id, log_entry, status='error')
-                    return False
+                    print(f"No active instance. waiting for instance to start.")
+                    time.sleep(backoff_factor * (2 ** attempt))
+                    continue
                 
             try:
                 response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
                 response_str = None
                 if response.status_code == 200:
                     try:
-                        response_json = response.json()  # Ensure response is parsed as JSON
+                        response_json = response.json()
                         response_str = response_json.get('response', response_json)
                     except Exception as e:
                         print(f"call_ollama_api error {e}. response: {response.text}")
@@ -447,7 +447,7 @@ def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app
                     if isinstance(response_str, str):
                         # see if the response_str contains json, ex: '{ "response": "0" }'
                         try:
-                            response_str_json = response_str.json()  # Ensure response is parsed as JSON
+                            response_str_json = response_str.json()
                             response_str = response_str_json.get('response', response_json)
                         except Exception as e:
                             pass # no problem, we'll just use response_str as is
