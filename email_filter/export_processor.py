@@ -444,7 +444,7 @@ def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app
                     except Exception as e:
                         print(f"call_ollama_api error {e}. response: {response.text}")
 
-                    if not isinstance(response_str, str):
+                    if isinstance(response_str, str):
                         # see if the response_str contains json, ex: '{ "response": "0" }'
                         try:
                             response_str_json = response_str.json()  # Ensure response is parsed as JSON
