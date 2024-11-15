@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
         if (processResultsButton) {
-            // checkProcessEmailResults();
+            checkProcessEmailResults();
             processResultsButton.addEventListener('click', function() {
                 const resultFileButton = document.getElementById('delete-file-btn');
 
