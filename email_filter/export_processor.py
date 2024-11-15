@@ -72,6 +72,8 @@ def monitor_threads(user_id, account_id, app_context):
 async def process_emails(user_id, account_id):
     global processing_status
     try:
+        if user_id is None:
+            raise ValueError("User ID cannot be None")
         if account_id is None:
             raise ValueError("Account ID cannot be None")
 
@@ -118,6 +120,8 @@ async def process_emails(user_id, account_id):
             mbox_filename, presigned_url = generate_files(user_id, account_id)
             result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
             if result:
+                result.user_id = user_id
+                result.account_id = account_id
                 result.name = mbox_filename
                 result.file_url = presigned_url
                 result.status = 'finished'
