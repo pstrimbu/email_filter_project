@@ -28,13 +28,16 @@ class InstanceManager:
         self.active_users = set()
         self.last_interaction = None
         self.timeout_minutes = 5
-        self.monitor_thread = Thread(target=self.start_monitoring)
-        self.monitor_thread.start()
+        self.monitor_thread = None
         self.user_id = None
         self.account_id = None
 
     async def request_instance(self, user_id=None, account_id=None):
         try:
+            if not self.monitor_thread:
+                self.monitor_thread = Thread(target=self.start_monitoring)
+                self.monitor_thread.start()
+
             if self.user_id:
                 self.user_id = user_id
             else:
@@ -134,8 +137,7 @@ class SpotInstanceManager:
 
         # Lock and threading setup
         self.interaction_lock = Lock()
-        self.monitor_thread = Thread(target=self.start_monitoring)
-        self.monitor_thread.start()
+        self.monitor_thread = None
 
         # State variables
         self.instance_id = None
@@ -157,6 +159,9 @@ class SpotInstanceManager:
         logging.info(message)
 
     async def request_instance(self, user_id=None, account_id=None):
+        if not self.monitor_thread:
+            self.monitor_thread = Thread(target=self.start_monitoring)
+            self.monitor_thread.start()
 
         if self.user_id:
             self.user_id = user_id
