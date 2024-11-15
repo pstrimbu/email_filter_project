@@ -71,6 +71,10 @@ class InstanceManager:
             logging.error(f"Error managing on-demand instance: {e}")
             return None
 
+    def log(self, message):
+        """Helper function to log messages with timestamps."""
+        logging.info(message)
+
     def terminate_instance(self, user_id=None):
         """Terminate the instance if no active users remain."""
         with self.interaction_lock:
