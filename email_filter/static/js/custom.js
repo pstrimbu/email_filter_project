@@ -598,8 +598,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
         if (processResultsButton) {
-            checkProcessEmailResults();
+            // checkProcessEmailResults();
             processResultsButton.addEventListener('click', function() {
+                const resultFileButton = document.getElementById('delete-file-btn');
+
+                // Check if the delete-file-btn is visible
+                if (resultFileButton && resultFileButton.style.display !== 'none') {
+                    const confirmReprocess = confirm('Are you sure you want to delete the current results and re-process?');
+                    if (!confirmReprocess) {
+                        return; // Exit if the user cancels
+                    }
+                }
+
                 processResultsButton.disabled = true; // Disable the button
                 liveResultsUpdateToggle.checked = true;
                 liveResultsUpdateToggle.dispatchEvent(new Event('change'));
@@ -614,9 +624,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                     .then(response => response.json())
                     .then(data => {
-                        processResultsButton.disabled = false;
                         if (data.success) {
-                            // displayFlashMessage('Processing emails...', 'info');
+                            simulateClick('process-item');
                         } else {
                             displayFlashMessage('Failed to process results: ' + data.error, 'danger');
                         }
@@ -763,7 +772,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     const currentStatusElement = document.getElementById('processResultsStatus');
                     const currentLogElement = document.getElementById('processResultsLog');
-                    const stopResultsButton = document.getElementById('stopResultsButton');
 
                     if (currentStatusElement && currentLogElement) {
                         currentStatusElement.textContent = status;

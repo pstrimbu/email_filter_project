@@ -19,6 +19,7 @@ import pyminizip
 from dotenv import load_dotenv
 from email_filter.globals import processing_status
 import threading
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -317,10 +318,21 @@ async def process_prompts(user_id, account_id):
         cant_process = 0
         ai_prompts = AIPrompt.query.filter_by(user_id=user_id, account_id=account_id).order_by(AIPrompt.order).all()
 
+        # Capture the current app context
+        app_context = current_app._get_current_object()
+
         # Use ThreadPoolExecutor to process emails concurrently
         with ThreadPoolExecutor(max_workers=5) as executor:        
-            with current_app.app_context():
-                future_to_email = {executor.submit(call_ollama_api, prompt.prompt_text, email, ollama_api_url, user_id, account_id): email for prompt in ai_prompts for email in emails}
+            with app_context.app_context():
+                future_to_email = {}
+                for prompt in ai_prompts:
+                    for email in emails:
+                        # Check stop condition before submitting new tasks
+                        if processing_status.get((user_id, account_id)) == 'stopping':
+                            return {'success': False, 'error': 'stopped by user request'}
+                        
+                        future = executor.submit(call_ollama_api, prompt.prompt_text, email, ollama_api_url, user_id, account_id, app_context)
+                        future_to_email[future] = email
 
                 start_time = time.time()
                 total_emails = len(future_to_email)
@@ -328,6 +340,7 @@ async def process_prompts(user_id, account_id):
                 log_interval = 10  # Log every 10 seconds
 
                 for future in as_completed(future_to_email):
+                    # Check stop condition within the loop
                     if processing_status.get((user_id, account_id)) == 'stopping':
                         return {'success': False, 'error': 'stopped by user request'}
 
@@ -341,11 +354,10 @@ async def process_prompts(user_id, account_id):
                             case '0': 
                                 email.action = 'exclude'
                                 excluded += 1
+                            case '2': # received "can't" response
+                                cant_process += 1
                             case _: 
                                 ignored += 1
-                                if "can't" in response:
-                                    cant_process += 1
-                                print(f"Unexpected response received for email {email.id}.\n{response[:300]}\n--------------------------------\n")
                                 email.action = 'ignore'
                     except Exception as e:
                         print(f"Error processing email {email.id}: {e}")
@@ -382,47 +394,81 @@ async def process_prompts(user_id, account_id):
             update_log_entry(user_id, account_id, log_entry, status='error terminating instance')
 
 
-def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id):
+def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app_context):
     global processing_status
     """Call Ollama API with retries."""
-    if not ollama_api_url:
-        print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
-        return False
-    
-    processor_type = os.getenv("PROCESSOR_TYPE", "spot")
-    if processor_type == "spot":
-        spot_instance_manager.update_last_interaction()
-    else:
-        instance_manager.update_last_interaction()
-
-    email_text = email.text_content
-    MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))  # Default to 5000 if not set
-    email_text = email_text[:MAX_LENGTH] if email_text else ""
-
-    system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
-    system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
-
-    max_retries = 10
-    backoff_factor = 0.5
-    for attempt in range(max_retries):
-        if processing_status.get((user_id, account_id)) == 'stopping':
+    with app_context.app_context():
+        if not ollama_api_url:
+            print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
             return False
         
-        if not spot_instance_manager.check_status():
-            log_entry = f"No active instance. Cannot process prompts."
-            update_log_entry(user_id, account_id, log_entry, status='error')
-            return False
-        try:
-            response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
-            if response.status_code == 200:
-                return response.json().get('response', 'default response')
-            if response.status_code == 500:
-                log_entry = f"AI Server error 500. Retrying in {backoff_factor * (2 ** attempt)} seconds"
-                update_log_entry(user_id, account_id, log_entry)
-        except RequestException as e:
-            print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
-            time.sleep(backoff_factor * (2 ** attempt))
-    return 'no response received'
+        processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+        if processor_type == "spot":
+            spot_instance_manager.update_last_interaction()
+        else:
+            instance_manager.update_last_interaction()
+
+        email_text = email.text_content
+        MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))  # Default to 5000 if not set
+        email_text = email_text[:MAX_LENGTH] if email_text else ""
+
+        system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
+        system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
+
+        max_retries = 10
+        backoff_factor = 0.5
+        for attempt in range(max_retries):
+            if processing_status.get((user_id, account_id)) == 'stopping':
+                return False
+            
+            processor_type = os.getenv("PROCESSOR_TYPE", "spot")
+            if processor_type == "spot":
+                if not spot_instance_manager.check_status():
+                    log_entry = f"No active instance. Cannot process prompts."
+                    update_log_entry(user_id, account_id, log_entry, status='error')
+                    return False
+            else:
+                if not instance_manager.check_status():
+                    log_entry = f"No active instance. Cannot process prompts."
+                    update_log_entry(user_id, account_id, log_entry, status='error')
+                    return False
+                
+            try:
+                response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
+                response_str = None
+                if response.status_code == 200:
+                    try:
+                        response_json = response.json()  # Ensure response is parsed as JSON
+                        response_str = response_json.get('response', response_json)
+                    except Exception as e:
+                        print(f"call_ollama_api error {e}. response: {response.text}")
+
+                    if not isinstance(response_str, str):
+                        # see if the response_str contains json, ex: '{ "response": "0" }'
+                        try:
+                            response_str_json = response_str.json()  # Ensure response is parsed as JSON
+                            response_str = response_str_json.get('response', response_json)
+                        except Exception as e:
+                            pass # no problem, we'll just use response_str as is
+
+                    if response_str is not None and (response_str == '0' or response_str == '1'):
+                        return response_str
+
+                    if isinstance(response_str, str) and "can't" in response_str:
+                        print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
+                        return '2'
+                  
+                    print(f"call_ollama_api unexpected response {response_str}.")
+                    return '-1'
+
+                elif response.status_code == 500:
+                    print(f"call_ollama_api error 500. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+                else:
+                    print(f"call_ollama_api unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+            except RequestException as e:
+                print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+                time.sleep(backoff_factor * (2 ** attempt))
+    return '-1'
 
 def generate_files(user_id, account_id):
     """Generates and uploads email files."""

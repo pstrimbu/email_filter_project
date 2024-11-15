@@ -29,23 +29,33 @@ class InstanceManager:
         self.last_interaction = None
         self.timeout_minutes = 5
 
-    async def manage_instance(self):
-        if self.processor_type == "instance":
-            await self._use_on_demand_instance()
-        else:
-            # Use existing SpotInstanceManager logic
-            pass
-
     async def request_instance(self, user_id, account_id):
         try:
-            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
-            state = response['Reservations'][0]['Instances'][0]['State']['Name']
-            if state == 'stopped':
-                self.ec2_client.start_instances(InstanceIds=[self.instance_id])
-                await self._wait_for_instance_ready(user_id, account_id)
-            elif state != 'running':
-                await self._wait_for_instance_ready(user_id, account_id)
-            
+            last_logged_time = datetime.now()
+            self.active_users.add(user_id)
+            while True:
+                response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+                state = response['Reservations'][0]['Instances'][0]['State']['Name']
+                status = None
+                
+                if state == 'stopped':
+                    self.ec2_client.start_instances(InstanceIds=[self.instance_id])
+                    logging.info(f"Starting instance {self.instance_id}.")
+                elif state == 'running':
+                    instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
+                    status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
+                    if status == 'ok':
+                        logging.info(f"Instance {self.instance_id} is now running and ready for requests.")
+                        break
+
+                # Log the current state every 30 seconds
+                current_time = datetime.now()
+                if (current_time - last_logged_time).total_seconds() >= 30:
+                    update_log_entry(user_id, account_id, f"Waiting for AI Server to be ready. Current state: {state}, Status: {status}")
+                    last_logged_time = current_time
+
+                await asyncio.sleep(5)  # Adjusted to 5 seconds
+
             # Retrieve the public IP address
             response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
             public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
@@ -59,31 +69,12 @@ class InstanceManager:
             logging.error(f"Error managing on-demand instance: {e}")
             return None
 
-    async def _wait_for_instance_ready(self, user_id, account_id):
-        last_logged_time = datetime.now() - timedelta(seconds=30)  # Initialize to ensure immediate logging
-        while True:
-            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
-            state = response['Reservations'][0]['Instances'][0]['State']['Name']
-            instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
-            status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
-
-            current_time = datetime.now()
-            if (current_time - last_logged_time).total_seconds() >= 30:
-                # Log the current state every 30 seconds
-                update_log_entry(user_id, account_id, f"Waiting for AI Server to be ready. Current state: {state}, Status: {status}")
-                last_logged_time = current_time
-
-            if state == 'running' and status == 'ok':
-                logging.info(f"Instance {self.instance_id} is now running and ready for requests.")
-                break
-            await asyncio.sleep(5)  # Adjusted to 5 seconds
-
-    def terminate_instance(self):
-        try:
-            self.ec2_client.stop_instances(InstanceIds=[self.instance_id])
-            logging.info(f"Instance {self.instance_id} stopped.")
-        except ClientError as e:
-            logging.error(f"Error stopping instance: {e}")
+    def terminate_instance(self, user_id=None):
+        """Terminate the instance if no active users remain."""
+        with self.interaction_lock:
+            if user_id:
+                self.active_users.discard(user_id)
+                logging.info(f"User {user_id} removed from active users list.")
 
     async def monitor_instance_status(self):
         await monitor_instance_status(self)
@@ -92,6 +83,19 @@ class InstanceManager:
         """Update the last interaction timestamp."""
         with self.interaction_lock:
             self.last_interaction = datetime.now()
+
+    def check_status(self):
+        """Check if the instance is currently active and status is 'ok'."""
+        with self.interaction_lock:
+            response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+            state = response['Reservations'][0]['Instances'][0]['State']['Name']
+            instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
+            status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
+            return state == 'running' and status == 'ok'
+    
+    def stop_instance(self):
+        self.ec2_client.stop_instances(InstanceIds=[self.instance_id])
+        logging.info(f"Instance {self.instance_id} stopped.")
 
 
 class SpotInstanceManager:
@@ -255,14 +259,16 @@ class SpotInstanceManager:
             if user_id:
                 self.active_users.discard(user_id)
                 self.log(f"User {user_id} removed from active users list.")
-            if not self.active_users and self.instance_id:
-                try:
-                    self.log(f"Terminating instance {self.instance_id}")
-                    self.ec2_client.terminate_instances(InstanceIds=[self.instance_id])
-                    self.instance_id = None
-                    self.instance_is_active = False
-                except ClientError as e:
-                    self.log(f"Error terminating instance: {e}")
+                
+
+    def stop_instance(self):
+        try:
+            self.log(f"Terminating spot instance {self.instance_id}")
+            self.ec2_client.terminate_instances(InstanceIds=[self.instance_id])
+            self.instance_id = None
+            self.instance_is_active = False
+        except ClientError as e:
+            self.log(f"Error terminating instance: {e}")
 
     async def monitor_instance_status(self):
         await monitor_instance_status(self)
@@ -270,12 +276,26 @@ class SpotInstanceManager:
 
 async def monitor_instance_status(manager):
     """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
+    no_active_users_since = None  # Track when no active users were first detected
+
     while True:
-        await asyncio.sleep(300)  # Check every 5 minutes
+        await asyncio.sleep(30)
         with manager.interaction_lock:
             if manager.instance_id and not manager.active_users:
-                manager.log("No active users. Stopping instance.")
-                manager.stop_instance()
+                if no_active_users_since is None:
+                    # Record the time when no active users were first detected
+                    no_active_users_since = datetime.now()
+                    manager.log("No active users detected. Starting 30-minute countdown to stop instance.")
+                elif (datetime.now() - no_active_users_since).total_seconds() >= 1800:
+                    # If 30 minutes have passed since no active users were detected
+                    manager.log("No active users for 30 minutes. Stopping instance.")
+                    manager.stop_instance()
+                    no_active_users_since = None  # Reset the timer
+            else:
+                # Reset the timer if there are active users or no instance
+                no_active_users_since = None
+                if manager.active_users:
+                    manager.log("Active users detected. Countdown to stop instance has been reset.")
 
 
 def delete_file_from_s3(bucket_name='mailmatch', file_key=None):
@@ -311,5 +331,3 @@ def generate_presigned_url(bucket_name, file_key, expiration=2592000):
     except ClientError as e:
         logging.error(f"Error generating presigned URL: {e}")
         raise
-
-
