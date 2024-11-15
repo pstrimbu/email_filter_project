@@ -301,7 +301,6 @@ class SpotInstanceManager:
                 self.active_users.discard(user_id)
                 self.log(f"User {user_id} removed from active users list.")
                 
-
     def stop_instance(self):
         try:
             self.log(f"Terminating spot instance {self.instance_id}")

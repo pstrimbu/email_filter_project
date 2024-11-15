@@ -10,7 +10,7 @@ from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status, processing_status
 from email_filter.logger import update_log_entry
-from .export_processor import process_emails, start_monitoring_thread
+from .export_processor import process_emails, start_monitoring_thread, stop
 from sqlalchemy import or_, func, and_
 from email_filter.aws import SpotInstanceManager, delete_file_from_s3
 
@@ -34,6 +34,7 @@ def init_routes(app):
                 return jsonify(success=False, message='Account ID is required'), 400
 
             try:
+                account_id = int(account_id)
                 results = Result.query.filter_by(user_id=current_user.id, account_id=account_id).all()
                 
                 if results:
@@ -67,6 +68,7 @@ def init_routes(app):
                 return jsonify(success=False, message='Account ID is required'), 400
 
             try:
+                account_id = int(account_id)
                 # Await the async process_emails function
                 await process_emails(current_user.id, account_id)
                 
@@ -175,6 +177,7 @@ def init_routes(app):
     @app.route('/email_account_view/<int:account_id>', methods=['GET'])
     @login_required
     def email_account_view(account_id):
+        account_id = int(account_id)
         account = EmailAccount.query.get_or_404(account_id)
 
         # Obfuscate the password
@@ -219,6 +222,7 @@ def init_routes(app):
     @app.route('/email_account_edit/<int:account_id>', methods=['GET', 'POST'])
     @login_required
     def email_account_edit(account_id):
+        account_id = int(account_id)
         account = EmailAccount.query.get_or_404(account_id)
         form = EmailAccountForm(obj=account)
 
@@ -245,6 +249,7 @@ def init_routes(app):
     @login_required
     def email_account_delete(account_id):
         try:
+            account_id = int(account_id)
             account = EmailAccount.query.get_or_404(account_id)
             db.session.delete(account)
             db.session.commit()
@@ -291,6 +296,7 @@ def init_routes(app):
     @login_required
     def delete_emails(account_id):
         try:
+            account_id = int(account_id)
             # Ensure the account belongs to the current user
             account = EmailAccount.query.get_or_404(account_id)
             if account.user_id != current_user.id:
@@ -314,6 +320,7 @@ def init_routes(app):
     @app.route('/scan_emails/<int:email_account_id>', methods=['POST'])
     @login_required
     def scan_emails(email_account_id):
+        email_account_id = int(email_account_id)
         email_account = EmailAccount.query.get(email_account_id)
 
         if email_account.user_id != current_user.id:
@@ -365,6 +372,7 @@ def init_routes(app):
     @login_required
     def test_email_connection(account_id):
         # Fetch the account details from the database
+        account_id = int(account_id)
         account = EmailAccount.query.get_or_404(account_id)
 
         # Ensure the account belongs to the current user
@@ -390,6 +398,7 @@ def init_routes(app):
     @app.route('/get_folder_counts/<int:account_id>', methods=['GET'])
     @login_required
     def get_folder_counts(account_id):
+        account_id = int(account_id)
         folders = EmailFolder.query.filter_by(account_id=account_id).all()
         folder_data = []
 
@@ -408,12 +417,14 @@ def init_routes(app):
     @app.route('/check_scan_status/<int:account_id>', methods=['GET'])
     @login_required
     def check_scan_status(account_id):
+        account_id = int(account_id)
         status = scan_status.get((current_user.id, account_id), 'stopped')
         return jsonify({'status': status})
 
     @app.route('/stop_scan/<int:account_id>', methods=['POST'])
     @login_required
     def stop_scan(account_id):
+        account_id = int(account_id)
         scan_status[(current_user.id, account_id)] = 'stopping' # this triggers the email_processor.py to exit the while true loop
         return jsonify({'success': True})
 
@@ -421,6 +432,8 @@ def init_routes(app):
     @login_required
     def email_addresses_view():
         account_id = request.args.get('account_id') or request.form.get('account_id')
+        if account_id:
+            account_id = int(account_id)
         
         if not account_id:
             flash('Account ID is required', 'danger')
@@ -454,6 +467,8 @@ def init_routes(app):
     @login_required
     def filters_view():
         account_id = request.args.get('account_id') or request.json.get('account_id')
+        if account_id:
+            account_id = int(account_id)
         
         if not account_id:
             return jsonify(success=False, message='Account ID is required'), 400
@@ -519,6 +534,8 @@ def init_routes(app):
 
         # For GET requests, retrieve prompts for the given account_id
         account_id = request.args.get('account_id')
+        if account_id:
+            account_id = int(account_id)
         ai_prompts = AIPrompt.query.filter_by(user_id=current_user.id, account_id=account_id).order_by(AIPrompt.order).all()
         return render_template('ai_prompts.html', ai_prompts=ai_prompts)
 
@@ -526,6 +543,8 @@ def init_routes(app):
     @login_required
     def dates_view():
         account_id = request.args.get('account_id') or request.form.get('account_id')
+        if account_id:
+            account_id = int(account_id)
         account = EmailAccount.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
 
         if request.method == 'POST':
@@ -697,13 +716,14 @@ def init_routes(app):
     @app.route('/check_processing_status/<int:account_id>', methods=['GET'])
     @login_required
     def check_processing_status(account_id):
+        account_id = int(account_id)
         status = processing_status.get((current_user.id, account_id), 'stopped')
         return jsonify({'status': status})
 
     @app.route('/stop_processing/<int:account_id>', methods=['POST'])
     @login_required
     def stop_processing(account_id):
-        start_monitoring_thread(current_user.id, account_id) # this triggers the export_processor.py to exit the while true loop
-        processing_status[(current_user.id, account_id)] = 'stopping' # this triggers the export_processor.py to exit the while true loop
+        account_id = int(account_id)
+        stop(current_user.id, account_id)
         update_log_entry(current_user.id, account_id, 'Stopping...', status='stopping')
         return jsonify({'success': True})

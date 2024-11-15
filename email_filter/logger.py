@@ -3,6 +3,8 @@ from .models import Result
 from .extensions import db
 
 def update_log_entry(user_id, account_id, log_entry, status='processing'):
+    if user_id is None:
+        raise ValueError("User ID cannot be None")
     if account_id is None:
         raise ValueError("Account ID cannot be None")
 

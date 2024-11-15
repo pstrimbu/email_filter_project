@@ -19,7 +19,6 @@ import pyminizip
 from dotenv import load_dotenv
 from email_filter.globals import processing_status
 import threading
-import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,6 +34,15 @@ instance_manager = InstanceManager()
 
 # Global variable to keep track of the monitoring thread
 monitoring_thread = None
+
+def stop(user_id, account_id):
+    global monitoring_thread
+
+    processing_status[(user_id, account_id)] = 'stopping'
+    if monitoring_thread is None or not monitoring_thread.is_alive():
+        app_context = current_app._get_current_object()
+        monitoring_thread = threading.Thread(target=monitor_threads, args=(user_id, account_id, app_context))
+        monitoring_thread.start()
 
 def start_monitoring_thread(user_id, account_id):
     global monitoring_thread
