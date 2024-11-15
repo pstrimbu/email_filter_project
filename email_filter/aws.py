@@ -30,9 +30,21 @@ class InstanceManager:
         self.timeout_minutes = 5
         self.monitor_thread = Thread(target=self.start_monitoring)
         self.monitor_thread.start()
+        self.user_id = None
+        self.account_id = None
 
-    async def request_instance(self, user_id, account_id):
+    async def request_instance(self, user_id=None, account_id=None):
         try:
+            if self.user_id:
+                self.user_id = user_id
+            else:
+                user_id = self.user_id
+
+            if self.account_id:
+                account_id = self.account_id
+            else:
+                account_id = account_id
+                
             last_logged_time = datetime.now()
             self.active_users.add(user_id)
             while True:
@@ -137,11 +149,25 @@ class SpotInstanceManager:
         self.timeout_minutes = 5
         self.max_runtime_minutes = 60
 
+        self.user_id = None
+        self.account_id = None
+
     def log(self, message):
         """Helper function to log messages with timestamps."""
         logging.info(message)
 
-    async def request_instance(self, user_id, account_id):
+    async def request_instance(self, user_id=None, account_id=None):
+
+        if self.user_id:
+            self.user_id = user_id
+        else:
+            user_id = self.user_id
+
+        if self.account_id:
+            account_id = self.account_id
+        else:
+            account_id = account_id
+
         """Requests or reuses a spot instance asynchronously."""
         async with asyncio.Lock():
             self.active_users.add(user_id)
@@ -294,12 +320,15 @@ async def monitor_instance_status(manager):
     while True:
         await asyncio.sleep(30)
         with manager.interaction_lock:
+            if manager.active_users and not manager.instance_id:
+                manager.request_instance()
+
             if manager.instance_id and not manager.active_users:
                 if no_active_users_since is None:
                     no_active_users_since = datetime.now()
-                    manager.log("No active users detected. Starting 10-minute countdown to stop instance.")
-                elif (datetime.now() - no_active_users_since).total_seconds() >= 600:
-                    manager.log("No active users for 10 minutes. Stopping instance.")
+                    manager.log("No active users detected. Starting 15-minute countdown to stop instance.")
+                elif (datetime.now() - no_active_users_since).total_seconds() >= 900:
+                    manager.log("No active users for 15 minutes. Stopping instance.")
                     manager.stop_instance()
                     no_active_users_since = None  # Reset the timer
             else:
