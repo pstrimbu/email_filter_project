@@ -374,7 +374,8 @@ async def process_prompts(user_id, account_id):
 
                         log_entry = (f"Processed {processed}/{total_emails} emails - "
                                     f"Included: {included}, Excluded: {excluded}, Remaining: {remaining}, "
-                                    f"Projected remaining time: {projected_remaining_time:.2f}s")
+                                    f"Elapsed: {elapsed_time:.2f}s, "
+                                    f"Projected: {projected_remaining_time:.2f}s")
                         update_log_entry(user_id, account_id, log_entry)
                         last_log_time = current_time
 

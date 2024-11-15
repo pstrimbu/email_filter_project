@@ -303,10 +303,8 @@ async def monitor_instance_status(manager):
                     manager.stop_instance()
                     no_active_users_since = None  # Reset the timer
             else:
-                # Reset the timer if there are active users or no instance
-                no_active_users_since = None
-                if manager.active_users:
-                    manager.log("Active users detected. Countdown to stop instance has been reset.")
+                if manager.active_users:                    
+                    no_active_users_since = None # Reset the timer if there are active users or no instance
 
 
 def delete_file_from_s3(bucket_name='mailmatch', file_key=None):
