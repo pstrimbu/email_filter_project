@@ -28,9 +28,12 @@ OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 HEADERS = {"x-api-key": OLLAMA_API_KEY, "Content-Type": "application/json"}
 
-# Initialize SpotInstanceManager instance
-spot_instance_manager = SpotInstanceManager()
-instance_manager = InstanceManager()
+# Initialize the appropriate instance manager based on PROCESSOR_TYPE
+PROCESSOR_TYPE = os.getenv("PROCESSOR_TYPE", "spot")
+if PROCESSOR_TYPE == "spot":
+    manager = SpotInstanceManager()
+else:
+    manager = InstanceManager()
 
 # Global variable to keep track of the monitoring thread
 monitoring_thread = None
@@ -294,7 +297,7 @@ def process_filters(user_id, account_id):
     update_log_entry(user_id, account_id, log_entry)
 
 
-def process_prompts(user_id, account_id):
+async def process_prompts(user_id, account_id):
     global processing_status
     # Check if there are any prompts defined
     has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
@@ -341,7 +344,7 @@ def process_prompts(user_id, account_id):
 
                     email = future_to_email[future]
                     try:
-                        response = future.result()
+                        response = await future.result()
                         match response:
                             case 1: 
                                 email.action = 'include'
@@ -381,43 +384,31 @@ def process_prompts(user_id, account_id):
     finally:
         # Notify AWS that the instance is no longer in use
         try:
-            processor_type = os.getenv("PROCESSOR_TYPE", "spot")
-            if processor_type == "spot":
-                spot_instance_manager.terminate_instance(user_id)
-            else:
-                instance_manager.terminate_instance(user_id)
+            manager.terminate_instance(user_id)
         except Exception as e:
             log_entry = f"Error terminating instance: {e}"
             update_log_entry(user_id, account_id, log_entry, status='error terminating instance')
 
 
-async def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_id, app_context):
+async def call_ollama_api(prompt_text, email, user_id, account_id, app_context):
     global processing_status
     """Call Ollama API with retries."""
     with app_context.app_context():
         public_ip = None
         # Register with AWS for a spot instance and get the IP address
         try:
-            processor_type = os.getenv("PROCESSOR_TYPE", "spot")
-            if processor_type == "spot":
-                public_ip = spot_instance_manager.get_public_ip()
-                spot_instance_manager.update_last_interaction()
-                if not public_ip:
-                    public_ip = await spot_instance_manager.request_instance(user_id, account_id)
-            else:
-                public_ip = instance_manager.get_public_ip()
-                instance_manager.update_last_interaction()
-                if not public_ip:
-                    public_ip = await instance_manager.request_instance(user_id, account_id)
+            public_ip = manager.get_public_ip()
+            manager.update_last_interaction()
+            if not public_ip:
+                public_ip = await manager.request_instance(user_id, account_id)
         except Exception as e:
             log_entry = f"Error requesting instance: {e}"
             update_log_entry(user_id, account_id, log_entry, status='error')
             return -1
 
         if not public_ip:
-            # log_entry = "No public IP address found. Cannot process prompts."
-            # update_log_entry(user_id, account_id, log_entry, status='error')
             return -1
+        
         ollama_api_url = f"http://{public_ip}:5000/api" 
 
         if not ollama_api_url:
@@ -437,18 +428,6 @@ async def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_i
             if processing_status.get((user_id, account_id)) == 'stopping':
                 return -1
             
-            # processor_type = os.getenv("PROCESSOR_TYPE", "spot")
-            # if processor_type == "spot":
-            #     if not spot_instance_manager or not spot_instance_manager.check_status():
-            #         print(f"No active instance. waiting for instance to start.")
-            #         time.sleep(backoff_factor * (2 ** attempt))
-            #         continue
-            # else:
-            #     if not instance_manager or not instance_manager.check_status():
-            #         print(f"No active instance. waiting for instance to start.")
-            #         time.sleep(backoff_factor * (2 ** attempt))
-            #         continue
-                
             try:
                 response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
                 response_str = None
@@ -483,10 +462,7 @@ async def call_ollama_api(prompt_text, email, ollama_api_url, user_id, account_i
                     print(f"call_ollama_api unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
             except RequestException as e:
                 # tell the instance manager that the instance is not ready
-                if processor_type == "spot":
-                    spot_instance_manager.set_public_ip(None)
-                else:
-                    instance_manager.set_public_ip(None)
+                manager.set_public_ip(None)
                 print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 time.sleep(backoff_factor * (2 ** attempt))
     return -2
