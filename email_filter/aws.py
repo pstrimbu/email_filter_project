@@ -41,7 +41,7 @@ class InstanceManager:
         """Get the public IP address."""
         return self._public_ip
 
-    async def request_instance(self, user_id=None, account_id=None):
+    async def request_instance(self, user_id, account_id):
         try:
             if not self.monitor_thread:
                 self.monitor_thread = Thread(target=self.start_monitoring)
