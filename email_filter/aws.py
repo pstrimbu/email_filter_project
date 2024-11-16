@@ -31,6 +31,15 @@ class InstanceManager:
         self.monitor_thread = None
         self.user_id = None
         self.account_id = None
+        self._public_ip = None
+
+    def set_public_ip(self, ip_address):
+        """Set the public IP address."""
+        self._public_ip = ip_address
+
+    def get_public_ip(self):
+        """Get the public IP address."""
+        return self._public_ip
 
     async def request_instance(self, user_id=None, account_id=None):
         try:
@@ -77,6 +86,7 @@ class InstanceManager:
             response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
             public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
             if public_ip:
+                self.set_public_ip(public_ip)
                 logging.info(f"Instance {self.instance_id} has public IP: {public_ip}")
                 return public_ip
             else:
@@ -153,6 +163,15 @@ class SpotInstanceManager:
 
         self.user_id = None
         self.account_id = None
+        self._public_ip = None
+
+    def set_public_ip(self, ip_address):
+        """Set the public IP address."""
+        self._public_ip = ip_address
+
+    def get_public_ip(self):
+        """Get the public IP address."""
+        return self._public_ip
 
     def log(self, message):
         """Helper function to log messages with timestamps."""
@@ -182,6 +201,7 @@ class SpotInstanceManager:
                 self.log(f"Using existing instance with ID: {self.instance_id}")
                 public_ip = await self._get_instance_public_ip(self.instance_id)
                 if public_ip:
+                    self.set_public_ip(public_ip)
                     update_log_entry(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {public_ip}")
                 else:
                     update_log_entry(user_id, account_id, "Public IP not available for existing instance.", status='error')
@@ -203,6 +223,7 @@ class SpotInstanceManager:
                         self.instance_is_active = True
                         public_ip = await self._get_instance_public_ip(self.instance_id)
                         if public_ip:
+                            self.set_public_ip(public_ip)
                             update_log_entry(user_id, account_id, f"Found registered AI Server with ID: {self.instance_id} and public IP: {public_ip}")
                             return public_ip
             except ClientError as e:
@@ -262,6 +283,7 @@ class SpotInstanceManager:
                     self.instance_is_active = True
                     public_ip = await self._get_instance_public_ip(instance_id)
                     if public_ip:
+                        self.set_public_ip(public_ip)
                         update_log_entry(user_id, account_id, f"Instance launched with ID: {instance_id} and public IP: {public_ip}")
                         return public_ip
             except ClientError as e:
