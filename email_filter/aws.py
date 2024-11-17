@@ -440,7 +440,6 @@ class SpotInstanceManager:
 
 async def monitor_instance_status(manager):
     """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
-    no_active_users_since = None  # Track when no active users were first detected
 
     while True:
         await asyncio.sleep(30)
@@ -449,16 +448,16 @@ async def monitor_instance_status(manager):
                 manager.request_instance()
 
             if manager.instance_id and not manager.active_users:
-                if no_active_users_since is None:
-                    no_active_users_since = datetime.now()
+                if manager.last_interaction is None:
+                    manager.last_interaction = datetime.now()
                     manager.log("No active users detected. Starting 15-minute countdown to stop instance.")
-                elif (datetime.now() - no_active_users_since).total_seconds() >= 900:
+                elif (datetime.now() - manager.last_interaction).total_seconds() >= 900:
                     manager.log("No active users for 15 minutes. Stopping instance.")
                     manager.stop_instance()
-                    no_active_users_since = None  # Reset the timer
+                    manager.last_interaction = None  # Reset the timer
             else:
-                if manager.active_users:                    
-                    no_active_users_since = None # Reset the timer if there are active users or no instance
+                if manager.active_users:
+                    manager.last_interaction = datetime.now()  # Update the last interaction time if there are active users
 
 
 def delete_file_from_s3(bucket_name='mailmatch', file_key=None):

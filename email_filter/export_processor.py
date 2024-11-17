@@ -74,7 +74,7 @@ def stop(user_id, account_id):
                 time.sleep(backoff_factor * (2 ** attempt))  # Exponential backoff
 
         if len(tasks) > 0:
-            update_log_entry(user_id, account_id, "Tasks did not complete in time.", status='error')
+            update_log_entry(user_id, account_id, "Stop request received. Waiting for tasks to complete.", status='stopping')
             processing_status[(user_id, account_id)] = 'stopping'
     except Exception as e:
         log_debug(user_id, account_id, f"Exception in stop: {e}")
@@ -110,19 +110,19 @@ async def process_emails(user_id, account_id):
 
         process_email_addresses(user_id, account_id)
 
-        if processing_status.get((user_id, account_id)) == 'stopping':
+        if processing_status.get((user_id, account_id)) == 'stopping' or processing_status.get((user_id, account_id)) == 'finished':
             update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
 
         process_filters(user_id, account_id)
 
-        if processing_status.get((user_id, account_id)) == 'stopping':
+        if processing_status.get((user_id, account_id)) == 'stopping' or processing_status.get((user_id, account_id)) == 'finished':
             update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
 
         await process_prompts(user_id, account_id)
 
-        if processing_status.get((user_id, account_id)) == 'stopping':
+        if processing_status.get((user_id, account_id)) == 'stopping' or processing_status.get((user_id, account_id)) == 'finished':
             update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
         
@@ -335,6 +335,9 @@ async def process_prompts(user_id, account_id):
         total_emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
 
         while True:
+            if processing_status.get((user_id, account_id)) == 'stopping' or processing_status.get((user_id, account_id)) == 'finished':
+                return False
+            
             print(f"Processing batch {offset}")
             emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').limit(batch_size).all()
             if not emails:
