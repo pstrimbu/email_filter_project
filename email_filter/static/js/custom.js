@@ -628,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             // reload when process is done
                             simulateClick('process-item');
                         } else {
-                            displayFlashMessage('Failed to process results: ' + data.error, 'danger');
+                            // displayFlashMessage('Failed to process results: ' + data.error, 'danger');
                         }
                     })
                     .catch(error => console.error('Error processing emails:', error))
