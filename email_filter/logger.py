@@ -1,13 +1,17 @@
 from datetime import datetime
 from .models import Result
 from .extensions import db
+import inspect
 
 def update_log_entry(user_id, account_id, log_entry, status='processing'):
     if user_id is None:
-        raise ValueError("update_log_entry: User ID cannot be None")
+        caller = inspect.stack()[1].function
+        print(f"ERROR: update_log_entry: User ID cannot be None. Called from {caller}")
+        return
     if account_id is None:
-        raise ValueError("update_log_entry: Account ID cannot be None")
-
+        caller = inspect.stack()[1].function
+        print(f"ERROR: update_log_entry: Account ID cannot be None. Called from {caller}")
+        return
     # Add a timestamp to the log entry
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_entry = f"[{timestamp}] {log_entry}\n"
