@@ -10,7 +10,7 @@ from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status, processing_status
 from email_filter.logger import update_log_entry
-from .export_processor import process_emails, start_monitoring_thread, stop
+from .export_processor import process_emails, stop
 from sqlalchemy import or_, func, and_
 from email_filter.aws import SpotInstanceManager, delete_file_from_s3
 
@@ -725,5 +725,4 @@ def init_routes(app):
     def stop_processing(account_id):
         account_id = int(account_id)
         stop(current_user.id, account_id)
-        update_log_entry(current_user.id, account_id, 'Stopping...', status='stopping')
         return jsonify({'success': True})

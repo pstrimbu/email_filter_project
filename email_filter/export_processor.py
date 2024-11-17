@@ -10,7 +10,6 @@ import tempfile
 from datetime import datetime
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from requests.exceptions import RequestException
 import random
@@ -18,7 +17,8 @@ import string
 import pyminizip
 from dotenv import load_dotenv
 from email_filter.globals import processing_status
-import threading
+import asyncio
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,50 +35,30 @@ if PROCESSOR_TYPE == "spot":
 else:
     manager = InstanceManager()
 
-# Global variable to keep track of the monitoring thread
-monitoring_thread = None
+tasks = []
+included = 0
+excluded = 0
+refused = 0
+errored = 0
+unexpected = 0
+processed = 0
+start_time = time.time()
+last_log_time = start_time
+total_emails = 0
+log_interval = int(os.getenv("LOG_INTERVAL", 30))
+
 
 def stop(user_id, account_id):
-    global monitoring_thread
+    for task in tasks:
+        task.close()
+        tasks.remove(task)
 
-    processing_status[(user_id, account_id)] = 'stopping'
-    if monitoring_thread is None or not monitoring_thread.is_alive():
-        app_context = current_app._get_current_object()
-        monitoring_thread = threading.Thread(target=monitor_threads, args=(user_id, account_id, app_context))
-        monitoring_thread.start()
+    if len(tasks) == 0:
+        update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
+    else:
+        update_log_entry(user_id, account_id, "Stop request received.", status='stopping')
+        processing_status[(user_id, account_id)] = 'stopping'
 
-def start_monitoring_thread(user_id, account_id):
-    global monitoring_thread
-    if monitoring_thread is None or not monitoring_thread.is_alive():
-        # Capture the current app context
-        app_context = current_app._get_current_object()
-        monitoring_thread = threading.Thread(target=monitor_threads, args=(user_id, account_id, app_context))
-        monitoring_thread.start()
-
-def monitor_threads(user_id, account_id, app_context):
-    global processing_status
-    with app_context.app_context():  # Use the passed app context
-        last_log_time = time.time()
-        log_interval = 30  # Log every 30 seconds
-
-        while True:
-            # Check if there are any active threads
-            active_threads = [t for t in threading.enumerate() if t.name.startswith('ThreadPoolExecutor')]
-            num_active_threads = len(active_threads)
-
-            # Log the number of active threads every 30 seconds
-            current_time = time.time()
-            if current_time - last_log_time >= log_interval:
-                log_entry = f"Active AI request threads: {num_active_threads}"
-                update_log_entry(user_id, account_id, log_entry, status='processing')
-                last_log_time = current_time
-
-            if not active_threads:
-                update_log_entry(user_id, account_id, "All threads finished", status='finished')
-                processing_status[(user_id, account_id)] = 'finished'
-                break
-
-            time.sleep(5)  # Check every 5 seconds
 
 async def process_emails(user_id, account_id):
     global processing_status
@@ -89,9 +69,6 @@ async def process_emails(user_id, account_id):
             raise ValueError("Account ID cannot be None")
 
         processing_status[(user_id, account_id)] = 'running'
-
-        # Start the monitoring thread
-        start_monitoring_thread(user_id, account_id)
 
         # Delete previous results
         preprocess_cleanup(user_id, account_id)
@@ -114,16 +91,19 @@ async def process_emails(user_id, account_id):
         process_email_addresses(user_id, account_id)
 
         if processing_status.get((user_id, account_id)) == 'stopping':
+            update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
 
         process_filters(user_id, account_id)
 
         if processing_status.get((user_id, account_id)) == 'stopping':
+            update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
 
         await process_prompts(user_id, account_id)
 
         if processing_status.get((user_id, account_id)) == 'stopping':
+            update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
             return {'success': False, 'error': 'stopped by user request'}
         
         try:
@@ -145,6 +125,7 @@ async def process_emails(user_id, account_id):
             return
     finally:
         processing_status[(user_id, account_id)] = 'finished'
+        update_log_entry(user_id, account_id, "Finished processing.", status='finished')
 
 
 def preprocess_cleanup(user_id, account_id):
@@ -158,7 +139,6 @@ def preprocess_cleanup(user_id, account_id):
         return
 
     try:
-
         # Delete existing Result entry for the user and account
         existing_results = Result.query.filter_by(user_id=user_id, account_id=account_id)
         if existing_results:
@@ -258,7 +238,6 @@ def process_email_addresses(user_id, account_id):
 
 
 def process_filters(user_id, account_id):
-
     # Check if there are any filters defined
     has_filters = db.session.query(Filter).filter_by(user_id=user_id, account_id=account_id).count() > 0
     if not has_filters:
@@ -298,87 +277,88 @@ def process_filters(user_id, account_id):
 
 
 async def process_prompts(user_id, account_id):
-    global processing_status
+    global processing_status, included, excluded, refused, errored, unexpected, total_emails, tasks
     # Check if there are any prompts defined
     has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
     if not has_prompts:
         return
 
     try:
-        # Fetch emails with action 'ignore'
-        emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').all()
+        # Fetch emails with action 'ignore' in batches
+        batch_size = int(os.getenv("EMAIL_BATCH_SIZE", 100))
 
-        included = 0
-        excluded = 0
-        ignored = 0
-        refused = 0
-        errored = 0
-        unexpected = 0
+        offset = 0
+
         ai_prompts = AIPrompt.query.filter_by(user_id=user_id, account_id=account_id).order_by(AIPrompt.order).all()
 
-        # Capture the current app context
-        app_context = current_app._get_current_object()
+        total_emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
 
-        # Use ThreadPoolExecutor to process emails concurrently
-        with ThreadPoolExecutor(max_workers=5) as executor:        
-            with app_context.app_context():
-                future_to_email = {}
-                for prompt in ai_prompts:
-                    for email in emails:
-                        # Check stop condition before submitting new tasks
-                        if processing_status.get((user_id, account_id)) == 'stopping':
-                            return {'success': False, 'error': 'stopped by user request'}
-                        
-                        future = executor.submit(call_ollama_api, prompt.prompt_text, email, user_id, account_id, app_context)
-                        future_to_email[future] = email
-
-                start_time = time.time()
-                total_emails = len(future_to_email)
-                last_log_time = start_time
-                log_interval = 10  # Log every 10 seconds
-
-                for future in as_completed(future_to_email):
-                    # Check stop condition within the loop
+        while True:
+            print(f"Processing batch {offset}")
+            emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').limit(batch_size).all()
+            if not emails:
+                break
+                   
+            # Use asyncio.gather to process emails concurrently
+            for prompt in ai_prompts:
+                for email in emails:
+                    # Check stop condition before submitting new tasks
                     if processing_status.get((user_id, account_id)) == 'stopping':
                         return {'success': False, 'error': 'stopped by user request'}
+                    
+                    # task = call_ollama_api(prompt.prompt_text, email, user_id, account_id)
+                    task = asyncio.create_task(call_ollama_api(prompt.prompt_text, email, user_id, account_id))
+                    
+                    tasks.append(task)
 
-                    email = future_to_email[future]
-                    try:
-                        response = await future.result()
-                        match response:
-                            case 1: 
-                                email.action = 'include'
-                                included += 1
-                            case 0: 
-                                email.action = 'exclude'
-                                excluded += 1
-                            case 2: # received "can't process" response
-                                refused += 1
-                            case -1: # received error response
-                                errored += 1
-                            case _: # unexpected response
-                                unexpected += 1
-                    except Exception as e:
-                        print(f"Error processing email {email.id}: {e}")
-                        email.action = 'ignore'
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    # Time-based logging
-                    current_time = time.time()
-                    if current_time - last_log_time >= log_interval:
-                        elapsed_time = current_time - start_time
-                        processed = included + excluded + ignored
-                        average_time = elapsed_time / processed
-                        remaining = total_emails - processed
-                        projected_remaining_time = average_time * remaining
+            # Clear tasks list for each batch
+            start_wait_time = time.time()  # Capture the current time
+            while len(tasks) > 0:
+                for task in tasks:
+                    if task.done():
+                        tasks.remove(task)
+                    elif time.time() - start_wait_time > 60:  # Check if wait time exceeds 60 seconds
+                        task.close()
+                        tasks.remove(task)
+                        print(f"Task exceeded 60 seconds and was closed.")
+                await asyncio.sleep(1)
+            
+            for response, email in zip(results, emails):
+                # Check stop condition within the loop
+                if processing_status.get((user_id, account_id)) == 'stopping':
+                    return {'success': False, 'error': 'stopped by user request'}
 
-                        log_entry = (f"Processed {processed}/{total_emails} emails - "
-                                    f"Included: {included}, Excluded: {excluded}, Refused: {refused}, Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining}, "
-                                    f"Elapsed: {elapsed_time:.2f}s, "
-                                    f"Projected: {projected_remaining_time:.2f}s")
-                        update_log_entry(user_id, account_id, log_entry)
-                        last_log_time = current_time
+                try:
+                    match response:
+                        case 1: 
+                            email.action = 'include'
+                            included += 1
+                            print(f"Included: {included}")
+                        case 0: 
+                            email.action = 'exclude'
+                            excluded += 1
+                            print(f"Excluded: {excluded}")
+                        case 2: # received "can't process" response
+                            email.action = 'exclude'
+                            refused += 1
+                            print(f"Refused: {refused}")
+                        case -1: # received error response
+                            email.action = 'exclude'
+                            errored += 1
+                            print(f"Errored: {errored}")
+                        case _: # unexpected response
+                            email.action = 'exclude'
+                            unexpected += 1
+                            print(f"Unexpected: {unexpected}")
+                except Exception as e:
+                    print(f"Error processing email {email.id}: {e}")
+                    email.action = 'ignore'
 
-        db.session.commit()
+            db.session.commit()
+            offset += batch_size
+
         log_entry = f"Prompts results - Included: {included}, Excluded: {excluded}, Refused: {refused}, Errored: {errored}, Unexpected: {unexpected}"
         update_log_entry(user_id, account_id, log_entry)
     finally:
@@ -387,47 +367,51 @@ async def process_prompts(user_id, account_id):
             manager.terminate_instance(user_id)
         except Exception as e:
             log_entry = f"Error terminating instance: {e}"
-            update_log_entry(user_id, account_id, log_entry, status='error terminating instance')
-
-
-async def call_ollama_api(prompt_text, email, user_id, account_id, app_context):
-    global processing_status
-    """Call Ollama API with retries."""
-    with app_context.app_context():
-        public_ip = None
-        # Register with AWS for a spot instance and get the IP address
-        try:
-            public_ip = manager.get_public_ip()
-            manager.update_last_interaction()
-            if not public_ip:
-                public_ip = await manager.request_instance(user_id, account_id)
-        except Exception as e:
-            log_entry = f"Error requesting instance: {e}"
             update_log_entry(user_id, account_id, log_entry, status='error')
-            return -1
 
-        if not public_ip:
-            return -1
-        
-        ollama_api_url = f"http://{public_ip}:5000/api" 
 
-        if not ollama_api_url:
-            print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
-            return -1
-        
-        email_text = email.text_content
-        MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))  # Default to 5000 if not set
-        email_text = email_text[:MAX_LENGTH] if email_text else ""
+async def call_ollama_api(prompt_text, email, user_id, account_id):
+    global processing_status, included, excluded, refused, errored, unexpected, last_log_time, start_time, total_emails
+    """Call Ollama API with retries."""
 
-        system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
-        system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
+    max_retries = 20
+    backoff_factor = 0.5
 
-        max_retries = 20
-        backoff_factor = 0.5
-        for attempt in range(max_retries):
+    for attempt in range(max_retries):
+        try:
             if processing_status.get((user_id, account_id)) == 'stopping':
                 return -1
-            
+
+            public_ip = None
+            # Register with AWS for a spot instance and get the IP address
+            try:
+                public_ip = manager.get_public_ip()
+                manager.update_last_interaction()
+                if not public_ip:
+                    public_ip = await manager.request_instance(user_id, account_id)
+            except Exception as e:
+                log_entry = f"Error requesting instance: {e}"
+                update_log_entry(user_id, account_id, log_entry, status='error')
+                time.sleep(backoff_factor * (2 ** attempt))
+                continue  # Retry the loop
+
+            if not public_ip:
+                time.sleep(backoff_factor * (2 ** attempt))
+                continue  # Retry the loop
+
+            ollama_api_url = f"http://{public_ip}:5000/api"
+
+            if not ollama_api_url:
+                print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
+                return -1
+
+            email_text = email.text_content
+            MAX_LENGTH = int(os.getenv("EMAIL_MAX_LENGTH", 5000))
+            email_text = email_text[:MAX_LENGTH] if email_text else ""
+
+            system_prompt_template = os.getenv("SYSTEM_PROMPT", "Default prompt text")
+            system_prompt = system_prompt_template.format(prompt_text=prompt_text, email_text=email_text)
+
             try:
                 response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL})
                 response_str = None
@@ -438,21 +422,24 @@ async def call_ollama_api(prompt_text, email, user_id, account_id, app_context):
                     except Exception as e:
                         print(f"call_ollama_api error {e}. response: {response.text}")
 
+                    if response_str is not None and (response_str == '0' or response_str == '1'):
+                        return int(response_str)
+
                     if isinstance(response_str, str):
                         # see if the response_str contains json, ex: '{ "response": "0" }'
                         try:
-                            response_str_json = response_str.json()
-                            response_str = response_str_json.get('response', response_json)
-                        except Exception as e:
-                            pass # no problem, we'll just use response_str as is
+                            response_str_json = json.loads(response_str)
+                            response_str = response_str_json.get('response', response_str)
 
-                    if response_str is not None and (response_str == '0' or response_str == '1'):
-                        return int(response_str)
+                            if response_str is not None and (response_str == '0' or response_str == '1'):
+                                return int(response_str)
+                        except json.JSONDecodeError:
+                            pass  # If parsing fails, use response_str as is
 
                     if isinstance(response_str, str) and "can't" in response_str:
                         print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
                         return 2
-                  
+
                     print(f"call_ollama_api unexpected response {response_str}.")
                     return -2
 
@@ -460,11 +447,38 @@ async def call_ollama_api(prompt_text, email, user_id, account_id, app_context):
                     print(f"call_ollama_api error 500. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 else:
                     print(f"call_ollama_api unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
-            except RequestException as e:
+            except Exception as e:
                 # tell the instance manager that the instance is not ready
                 manager.set_public_ip(None)
                 print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 time.sleep(backoff_factor * (2 ** attempt))
+        finally:
+            processed = included + excluded          
+            remaining = total_emails - processed
+
+            try:
+                # Time-based logging
+                current_time = time.time()
+                if current_time - last_log_time >= log_interval:
+                    elapsed_time = current_time - start_time
+                    if processed > 0:
+                        average_time = elapsed_time / processed
+                        projected_remaining_time = average_time * remaining
+
+                        log_entry = (f"Processed {processed}/{total_emails} emails - "
+                                    f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
+                                    f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining}, "
+                                    f"Elapsed: {elapsed_time:.2f}s, "
+                                    f"Projected: {projected_remaining_time:.2f}s")
+                    else:
+                        log_entry = (f"Processed {processed}/{total_emails} emails - "
+                                    f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
+                                    f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining} "
+                                    f"Elapsed: {elapsed_time:.2f}s ")
+                    update_log_entry(user_id, account_id, log_entry)
+                    last_log_time = current_time
+            except Exception as e:
+                print(f"Error logging: {e}")
     return -2
 
 def generate_files(user_id, account_id):
@@ -497,8 +511,7 @@ def generate_files(user_id, account_id):
 
     presigned_url = generate_presigned_url('mailmatch', zip_filename)
 
-    log_entry = f"Generated zip file and uploaded to S3."
-    update_log_entry(user_id, account_id, log_entry, status='finished')
+    update_log_entry(user_id, account_id, "Generated zip file and uploaded to S3.", status='finished')
 
     result = Result.query.filter_by(user_id=user_id, account_id=account_id).first()
     if result:
