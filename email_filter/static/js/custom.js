@@ -755,7 +755,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-CSRFToken': csrfToken
                 }
             })
-            .then(response => response.text())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.message || 'Unknown error occurred');
+                    });
+                }
+                return response.text();
+            })
             .then(html => {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
@@ -804,7 +811,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Failed to extract process data from HTML.');
                 }
             })
-            .catch(error => console.error('Error retrieving process data:', error));
+            .catch(error => {
+                console.error('Error retrieving process data:', error);
+                displayFlashMessage('Error retrieving process data: ' + error.message, 'danger');
+            });
     }
 
     // Sidebar main navigation links click event handlers
