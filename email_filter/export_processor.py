@@ -485,11 +485,11 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                             pass  # If parsing fails, use response_str as is
 
                     if isinstance(response_str, str) and "can't" in response_str:
-                        print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
+                        # print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
                         log_debug(user_id, account_id, f"Received 'can't' response for email {email.id}: {response_str[:300]}")
                         return 2
 
-                    print(f"call_ollama_api unexpected response {response_str}.")
+                    # print(f"call_ollama_api unexpected response {response_str}.")
                     log_debug(user_id, account_id, f"Received unexpected response: {response_str[:300] if len(response_str) >= 300 else response_str}")
                     return -2
 
