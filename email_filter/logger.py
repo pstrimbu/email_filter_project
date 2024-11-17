@@ -4,9 +4,9 @@ from .extensions import db
 
 def update_log_entry(user_id, account_id, log_entry, status='processing'):
     if user_id is None:
-        raise ValueError("User ID cannot be None")
+        raise ValueError("update_log_entry: User ID cannot be None")
     if account_id is None:
-        raise ValueError("Account ID cannot be None")
+        raise ValueError("update_log_entry: Account ID cannot be None")
 
     # Add a timestamp to the log entry
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

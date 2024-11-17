@@ -9,9 +9,8 @@ from imaplib import IMAP4_SSL
 from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status, processing_status
-from email_filter.logger import update_log_entry
 from .export_processor import process_emails, stop
-from sqlalchemy import or_, func, and_
+from sqlalchemy import or_, func
 from email_filter.aws import SpotInstanceManager, delete_file_from_s3
 
 
@@ -69,6 +68,7 @@ def init_routes(app):
 
             try:
                 account_id = int(account_id)
+                print(f"Entering process_email_results: {current_user.id}, {account_id}")
                 # Await the async process_emails function
                 await process_emails(current_user.id, account_id)
                 

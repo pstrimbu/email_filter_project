@@ -71,7 +71,7 @@ def stop(user_id, account_id):
         log_debug(user_id, account_id, f"Exception in stop: {e}")
 
 async def process_emails(user_id, account_id):
-    log_debug(user_id, account_id, "Entering process_emails function")
+    log_debug(user_id, account_id, f"Entering process_emails: {user_id}, {account_id}")
     global processing_status
     try:
         if user_id is None:
