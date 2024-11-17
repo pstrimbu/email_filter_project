@@ -56,7 +56,7 @@ class InstanceManager:
         self._public_ip = None
         self.request_in_progress = False
 
-    def _is_valid_aws_profile(self, user_id, account_id):
+    def _is_valid_aws_profile(self):
         """Check if the AWS profile is valid."""
         try:
             # Attempt to get the current region to verify the session
@@ -226,7 +226,7 @@ class SpotInstanceManager:
         self._public_ip = None
         self.request_in_progress = False
 
-    def _is_valid_aws_profile(self, user_id, account_id):
+    def _is_valid_aws_profile(self):
         """Check if the AWS profile is valid."""
         try:
             # Attempt to get the current region to verify the session
