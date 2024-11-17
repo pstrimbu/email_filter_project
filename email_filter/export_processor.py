@@ -23,6 +23,9 @@ import json
 # Load environment variables from .env file
 load_dotenv()
 
+# Debug flag
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+
 # Ollama API details
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
@@ -48,19 +51,29 @@ total_emails = 0
 log_interval = int(os.getenv("LOG_INTERVAL", 30))
 
 
+def log_debug(user_id, account_id, message):
+    if DEBUG_MODE:
+        update_log_entry(user_id, account_id, f"DEBUG: {message}")
+
 def stop(user_id, account_id):
-    for task in tasks:
-        task.close()
-        tasks.remove(task)
+    log_debug(user_id, account_id, "Entering stop function")
+    try:
+        for task in tasks:
+            task.close()
+            tasks.remove(task)
 
-    if len(tasks) == 0:
-        update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
-    else:
-        update_log_entry(user_id, account_id, "Stop request received.", status='stopping')
-        processing_status[(user_id, account_id)] = 'stopping'
-
+        if len(tasks) == 0:
+            update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
+        else:
+            update_log_entry(user_id, account_id, "Stop request received.", status='stopping')
+            processing_status[(user_id, account_id)] = 'stopping'
+    except Exception as e:
+        log_debug(user_id, account_id, f"Exception in stop: {e}")
+    finally:
+        log_debug(user_id, account_id, "Exiting stop function")
 
 async def process_emails(user_id, account_id):
+    log_debug(user_id, account_id, "Entering process_emails function")
     global processing_status
     try:
         if user_id is None:
@@ -126,9 +139,11 @@ async def process_emails(user_id, account_id):
     finally:
         processing_status[(user_id, account_id)] = 'finished'
         update_log_entry(user_id, account_id, "Finished processing.", status='finished')
+        log_debug(user_id, account_id, "Exiting process_emails function")
 
 
 def preprocess_cleanup(user_id, account_id):
+    log_debug(user_id, account_id, "Entering preprocess_cleanup function")
     try:
         # Set all emails to 'ignore' before processing
         db.session.query(Email).filter_by(user_id=user_id, account_id=account_id).update({'action': 'ignore'}, synchronize_session=False)
@@ -155,9 +170,12 @@ def preprocess_cleanup(user_id, account_id):
         log_entry = f"Error deleting existing results: {e}"
         update_log_entry(user_id, account_id, log_entry, status='error')
         return
+    finally:
+        log_debug(user_id, account_id, "Exiting preprocess_cleanup function")
 
 
 def process_email_addresses(user_id, account_id):
+    log_debug(user_id, account_id, "Entering process_email_addresses function")
     # Check if there are any email addresses set to include/exclude
     has_email_addresses = db.session.query(EmailAddress).filter(
         EmailAddress.user_id == user_id,
@@ -235,9 +253,11 @@ def process_email_addresses(user_id, account_id):
     ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
     log_entry = f"Remaining: {ignored}"
     update_log_entry(user_id, account_id, log_entry)
+    log_debug(user_id, account_id, "Exiting process_email_addresses function")
 
 
 def process_filters(user_id, account_id):
+    log_debug(user_id, account_id, "Entering process_filters function")
     # Check if there are any filters defined
     has_filters = db.session.query(Filter).filter_by(user_id=user_id, account_id=account_id).count() > 0
     if not has_filters:
@@ -274,9 +294,11 @@ def process_filters(user_id, account_id):
     ignored = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').count()
     log_entry = f"Remaining: {ignored}"
     update_log_entry(user_id, account_id, log_entry)
+    log_debug(user_id, account_id, "Exiting process_filters function")
 
 
 async def process_prompts(user_id, account_id):
+    log_debug(user_id, account_id, "Entering process_prompts function")
     global processing_status, included, excluded, refused, errored, unexpected, total_emails, tasks
     # Check if there are any prompts defined
     has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
@@ -368,9 +390,11 @@ async def process_prompts(user_id, account_id):
         except Exception as e:
             log_entry = f"Error terminating instance: {e}"
             update_log_entry(user_id, account_id, log_entry, status='error')
+        log_debug(user_id, account_id, "Exiting process_prompts function")
 
 
 async def call_ollama_api(prompt_text, email, user_id, account_id):
+    log_debug(user_id, account_id, "Entering call_ollama_api function")
     global processing_status, included, excluded, refused, errored, unexpected, last_log_time, start_time, total_emails
     """Call Ollama API with retries."""
 
@@ -480,8 +504,10 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
             except Exception as e:
                 print(f"Error logging: {e}")
     return -2
+    log_debug(user_id, account_id, "Exiting call_ollama_api function")
 
 def generate_files(user_id, account_id):
+    log_debug(user_id, account_id, "Entering generate_files function")
     """Generates and uploads email files."""
     email_account = EmailAccount.query.get(account_id)
     if not email_account:
@@ -524,3 +550,4 @@ def generate_files(user_id, account_id):
     os.remove(zip_path)
 
     return zip_filename, presigned_url
+    log_debug(user_id, account_id, "Exiting generate_files function")
