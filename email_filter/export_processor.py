@@ -340,6 +340,7 @@ async def process_prompts(user_id, account_id):
                     if task.done():
                         tasks.remove(task)
                     elif time.time() - start_wait_time > 60:  # Check if wait time exceeds 60 seconds
+                        # TODO: may need to increment a skip counter so we don't repeatedly try emails that wont work.
                         task.close()
                         tasks.remove(task)
                         print(f"Task exceeded 60 seconds and was closed.")
@@ -408,16 +409,18 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
             # Register with AWS for a spot instance and get the IP address
             try:
                 public_ip = manager.get_public_ip()
+                log_debug(user_id, account_id, f"Got public IP: {public_ip}")
                 manager.update_last_interaction()
                 if not public_ip:
                     public_ip = await manager.request_instance(user_id, account_id)
             except Exception as e:
-                log_entry = f"Error requesting instance: {e}"
+                log_debug(user_id, account_id, f"Error requesting instance: {e}")
                 update_log_entry(user_id, account_id, log_entry, status='error')
                 time.sleep(backoff_factor * (2 ** attempt))
                 continue  # Retry the loop
 
             if not public_ip:
+                log_debug(user_id, account_id, f"No public IP found, retrying: {attempt}")
                 time.sleep(backoff_factor * (2 ** attempt))
                 continue  # Retry the loop
 
@@ -449,6 +452,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
 
                 response_str = None
                 if response.status_code == 200:
+                    log_debug(user_id, account_id, f"Received response: {response.status_code}")
                     try:
                         response_json = response.json()
                         response_str = response_json.get('response', response_json)
@@ -456,6 +460,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                         print(f"call_ollama_api error {e}. response: {response.text}")
 
                     if response_str is not None and (response_str == '0' or response_str == '1'):
+                        log_debug(user_id, account_id, f"Returning {response_str}")
                         return int(response_str)
 
                     if isinstance(response_str, str):
@@ -465,53 +470,54 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                             response_str = response_str_json.get('response', response_str)
 
                             if response_str is not None and (response_str == '0' or response_str == '1'):
+                                log_debug(user_id, account_id, f"Returning {response_str}")
                                 return int(response_str)
                         except json.JSONDecodeError:
                             pass  # If parsing fails, use response_str as is
 
                     if isinstance(response_str, str) and "can't" in response_str:
                         print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
+                        log_debug(user_id, account_id, f"Received 'can't' response for email {email.id}: {response_str[:300]}")
                         return 2
 
                     print(f"call_ollama_api unexpected response {response_str}.")
+                    log_debug(user_id, account_id, f"Received unexpected response: {response_str[:300]}")
                     return -2
 
                 elif response.status_code == 500:
-                    print(f"call_ollama_api error 500. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+                    log_debug(user_id, account_id, f"Received 500 response. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 else:
-                    print(f"call_ollama_api unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+                    log_debug(user_id, account_id, f"Received unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
             except Exception as e:
                 # tell the instance manager that the instance is not ready
                 manager.set_public_ip(None)
-                print(f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
+                log_debug(user_id, account_id, f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 time.sleep(backoff_factor * (2 ** attempt))
         finally:
             processed = included + excluded          
             remaining = total_emails - processed
 
-            try:
-                # Time-based logging
-                current_time = time.time()
-                if current_time - last_log_time >= log_interval:
-                    elapsed_time = current_time - start_time
-                    if processed > 0:
-                        average_time = elapsed_time / processed
-                        projected_remaining_time = average_time * remaining
+            # Time-based logging
+            current_time = time.time()
+            if current_time - last_log_time >= log_interval:
+                elapsed_time = current_time - start_time
+                if processed > 0:
+                    average_time = elapsed_time / processed
+                    projected_remaining_time = average_time * remaining
 
-                        log_entry = (f"Processed {processed}/{total_emails} emails - "
-                                    f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
-                                    f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining}, "
-                                    f"Elapsed: {elapsed_time:.2f}s, "
-                                    f"Projected: {projected_remaining_time:.2f}s")
-                    else:
-                        log_entry = (f"Processed {processed}/{total_emails} emails - "
-                                    f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
-                                    f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining} "
-                                    f"Elapsed: {elapsed_time:.2f}s ")
-                    update_log_entry(user_id, account_id, log_entry)
-                    last_log_time = current_time
-            except Exception as e:
-                print(f"Error logging: {e}")
+                    log_entry = (f"Processed {processed}/{total_emails} emails - "
+                                f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
+                                f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining}, "
+                                f"Elapsed: {elapsed_time:.2f}s, "
+                                f"Projected: {projected_remaining_time:.2f}s")
+                else:
+                    log_entry = (f"Processed {processed}/{total_emails} emails - "
+                                f"Included: {included}, Excluded: {excluded}, Refused: {refused}, "
+                                f"Errored: {errored}, Unexpected: {unexpected}, Remaining: {remaining} "
+                                f"Elapsed: {elapsed_time:.2f}s ")
+                update_log_entry(user_id, account_id, log_entry)
+                last_log_time = current_time
+    log_debug(user_id, account_id, f"call_ollama_api: returning -2")
     return -2
     log_debug(user_id, account_id, "Exiting call_ollama_api function")
 
