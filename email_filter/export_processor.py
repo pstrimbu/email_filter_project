@@ -45,7 +45,6 @@ refused = 0
 errored = 0
 unexpected = 0
 processed = 0
-start_time = time.time()
 last_log_time = start_time
 total_emails = 0
 log_interval = int(os.getenv("LOG_INTERVAL", 30))
@@ -305,7 +304,19 @@ def process_filters(user_id, account_id):
 
 async def process_prompts(user_id, account_id):
     log_debug(user_id, account_id, "Entering process_prompts function")
-    global processing_status, included, excluded, refused, errored, unexpected, total_emails, tasks
+    global processing_status, included, excluded, refused, errored, unexpected, total_emails, tasks, start_time, last_log_time
+
+    included = 0
+    excluded = 0
+    refused = 0
+    errored = 0
+    unexpected = 0
+    processed = 0
+    total_emails = 0
+
+    start_time = time.time()
+    last_log_time = start_time
+
     # Check if there are any prompts defined
     has_prompts = db.session.query(AIPrompt).filter_by(user_id=user_id, account_id=account_id).count() > 0
     if not has_prompts:
