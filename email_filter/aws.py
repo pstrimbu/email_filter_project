@@ -20,6 +20,9 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 def log_debug(user_id, account_id, message):
+    if not user_id or not account_id:
+        logging.error(f"User ID or account ID is None. Cannot log debug message: {message}")
+        return
     if DEBUG_MODE:
         update_log_entry(user_id, account_id, f"DEBUG: {message}")
 
@@ -52,7 +55,7 @@ class InstanceManager:
         self.account_id = None
         self._public_ip = None
 
-    def _is_valid_aws_profile(self):
+    def _is_valid_aws_profile(self, user_id, account_id):
         """Check if the AWS profile is valid."""
         try:
             # Attempt to get the current region to verify the session
@@ -212,7 +215,7 @@ class SpotInstanceManager:
         self.account_id = None
         self._public_ip = None
 
-    def _is_valid_aws_profile(self):
+    def _is_valid_aws_profile(self, user_id, account_id):
         """Check if the AWS profile is valid."""
         try:
             # Attempt to get the current region to verify the session
@@ -356,8 +359,8 @@ class SpotInstanceManager:
         update_log_entry(user_id, account_id, "AI Server launch timed out", status='error')
         return None
 
-    async def _get_instance_public_ip(self, instance_id):
-        log_debug(None, None, f"Entering _get_instance_public_ip function for instance {instance_id}")
+    async def _get_instance_public_ip(self, instance_id, user_id, account_id):
+        log_debug(user_id, account_id, f"Entering _get_instance_public_ip function for instance {instance_id}")
         """Retrieve the public IP of an instance asynchronously."""
         for attempt in range(5):
             try:
@@ -406,7 +409,7 @@ class SpotInstanceManager:
 
 async def monitor_instance_status(manager):
     """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
-    log_debug(None, None, "Entering monitor_instance_status function")
+    log_debug(manager.user_id, manager.account_id, "Entering monitor_instance_status function")
     no_active_users_since = None  # Track when no active users were first detected
 
     while True:
