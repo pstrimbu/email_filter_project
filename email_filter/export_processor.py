@@ -59,7 +59,7 @@ def stop(user_id, account_id):
     log_debug(user_id, account_id, "Entering stop function")
     try:
         # Retry loop with backoff
-        max_retries = 20
+        max_retries = 10
         backoff_factor = 0.5
         for attempt in range(max_retries):
             for task in tasks:
@@ -419,7 +419,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                 public_ip = manager.get_public_ip()
                 log_debug(user_id, account_id, f"Got public IP: {public_ip}")
                 if not public_ip:
-                    update_log_entry(user_id, account_id, f"No public IP found, requesting instance, user_id: {user_id}, account_id: {account_id}")
+                    update_log_entry(user_id, account_id, "No AI Server found, requesting instance")
                     public_ip = await manager.request_instance(user_id, account_id)
             except Exception as e:
                 log_debug(user_id, account_id, f"Error requesting instance: {e}")
