@@ -27,6 +27,7 @@ def init_routes(app):
     @app.route("/process_email_results", methods=['GET', 'POST'])
     @login_required
     async def process_email_results():
+        print(f"Entering process_email_results {request.method}, user_id: {current_user.id} ") 
         if request.method == 'GET':
             account_id = request.args.get('account_id')
             if not account_id:
@@ -61,6 +62,7 @@ def init_routes(app):
                 return jsonify(success=False, message='An internal error occurred'), 500
 
         elif request.method == 'POST':
+            print(f"Entering process_email_results POST: {current_user.id}, {request.get_json()}")
             data = request.get_json()
             account_id = data.get('account_id')
             if not account_id:
@@ -68,7 +70,6 @@ def init_routes(app):
 
             try:
                 account_id = int(account_id)
-                print(f"Entering process_email_results: {current_user.id}, {account_id}")
                 # Await the async process_emails function
                 await process_emails(current_user.id, account_id)
                 
