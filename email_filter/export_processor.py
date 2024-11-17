@@ -476,6 +476,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                         try:
                             response_str_json = json.loads(response_str)
                             response_str = response_str_json.get('response', response_str)
+                            response_str = response_str.split('\n')[0]
 
                             if response_str is not None and (response_str == '0' or response_str == '1'):
                                 log_debug(user_id, account_id, f"Returning {response_str}")
