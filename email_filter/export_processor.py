@@ -69,8 +69,6 @@ def stop(user_id, account_id):
             processing_status[(user_id, account_id)] = 'stopping'
     except Exception as e:
         log_debug(user_id, account_id, f"Exception in stop: {e}")
-    finally:
-        log_debug(user_id, account_id, "Exiting stop function")
 
 async def process_emails(user_id, account_id):
     log_debug(user_id, account_id, "Entering process_emails function")
