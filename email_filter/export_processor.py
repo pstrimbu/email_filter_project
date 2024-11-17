@@ -58,6 +58,9 @@ def log_debug(user_id, account_id, message):
 
 def stop(user_id, account_id):
     log_debug(user_id, account_id, "Entering stop function")
+
+    processing_status[(user_id, account_id)] = 'stopping'
+    
     try:
         # Retry loop with backoff
         max_retries = 10
@@ -75,7 +78,7 @@ def stop(user_id, account_id):
 
         if len(tasks) > 0:
             update_log_entry(user_id, account_id, "Stop request received. Waiting for tasks to complete.", status='stopping')
-            processing_status[(user_id, account_id)] = 'stopping'
+            
     except Exception as e:
         log_debug(user_id, account_id, f"Exception in stop: {e}")
 
@@ -338,7 +341,7 @@ async def process_prompts(user_id, account_id):
             if processing_status.get((user_id, account_id)) == 'stopping' or processing_status.get((user_id, account_id)) == 'finished':
                 return False
             
-            print(f"Processing batch {offset}")
+            log_debug(user_id, account_id, f"Processing batch {offset}, processing_status: {processing_status.get((user_id, account_id))}")
             emails = db.session.query(Email).filter_by(user_id=user_id, account_id=account_id, action='ignore').limit(batch_size).all()
             if not emails:
                 break
@@ -411,9 +414,10 @@ async def process_prompts(user_id, account_id):
 
 
 async def call_ollama_api(prompt_text, email, user_id, account_id):
-    log_debug(user_id, account_id, f"Entering call_ollama_api function, user_id: {user_id}, account_id: {account_id}")
     global processing_status, included, excluded, refused, errored, unexpected, last_log_time, start_time, total_emails
     """Call Ollama API with retries."""
+
+    log_debug(user_id, account_id, f"Entering call_ollama_api function, user_id: {user_id}, account_id: {account_id}")
 
     max_retries = 20
     backoff_factor = 0.5
