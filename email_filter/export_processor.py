@@ -403,6 +403,12 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
 
     for attempt in range(max_retries):
         try:
+            # Initialize response to None
+            response = None
+
+            # tell the manager we are still using the instance
+            manager.update_last_interaction()
+
             if processing_status.get((user_id, account_id)) == 'stopping':
                 return -1
 
@@ -411,9 +417,8 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
             try:
                 public_ip = manager.get_public_ip()
                 log_debug(user_id, account_id, f"Got public IP: {public_ip}")
-                manager.update_last_interaction()
                 if not public_ip:
-                    update_log_entry(user_id, account_id, f"No public IP found, requesting instance")
+                    update_log_entry(user_id, account_id, f"No public IP found, requesting instance, user_id: {user_id}, account_id: {account_id}")
                     public_ip = await manager.request_instance(user_id, account_id)
             except Exception as e:
                 log_debug(user_id, account_id, f"Error requesting instance: {e}")
@@ -492,7 +497,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                     log_debug(user_id, account_id, f"Received unexpected response {response.status_code}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
             except Exception as e:
                 # tell the instance manager that the instance is not ready
-                manager.set_public_ip(None)
+                # manager.set_public_ip(None)
                 log_debug(user_id, account_id, f"Error processing email {email.id}: {e}. Retrying in {backoff_factor * (2 ** attempt)} seconds")
                 time.sleep(backoff_factor * (2 ** attempt))
         finally:
