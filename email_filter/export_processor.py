@@ -45,9 +45,11 @@ refused = 0
 errored = 0
 unexpected = 0
 processed = 0
-last_log_time = start_time
 total_emails = 0
 log_interval = int(os.getenv("LOG_INTERVAL", 30))
+
+start_time = time.time()
+last_log_time = start_time
 
 
 def log_debug(user_id, account_id, message):
