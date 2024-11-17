@@ -326,8 +326,6 @@ async def process_prompts(user_id, account_id):
                     if processing_status.get((user_id, account_id)) == 'stopping':
                         return {'success': False, 'error': 'stopped by user request'}
                     
-                    # task = call_ollama_api(prompt.prompt_text, email, user_id, account_id)
-                    print(f"calling call_ollama_api, user_id: {user_id}, account_id: {account_id}")
                     task = asyncio.create_task(call_ollama_api(prompt.prompt_text, email, user_id, account_id))
                     
                     tasks.append(task)
@@ -357,23 +355,18 @@ async def process_prompts(user_id, account_id):
                         case 1: 
                             email.action = 'include'
                             included += 1
-                            print(f"Included: {included}")
                         case 0: 
                             email.action = 'exclude'
                             excluded += 1
-                            print(f"Excluded: {excluded}")
                         case 2: # received "can't process" response
                             email.action = 'exclude'
                             refused += 1
-                            print(f"Refused: {refused}")
                         case -1: # received error response
                             email.action = 'exclude'
                             errored += 1
-                            print(f"Errored: {errored}")
                         case _: # unexpected response
                             email.action = 'exclude'
                             unexpected += 1
-                            print(f"Unexpected: {unexpected}")
                 except Exception as e:
                     print(f"Error processing email {email.id}: {e}")
                     email.action = 'ignore'
