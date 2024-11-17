@@ -437,8 +437,16 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
             try:
                 # Add logging before and after network calls
                 log_debug(user_id, account_id, "Preparing to make network request")
-                response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL}, timeout=30, verify=False)
-                log_debug(user_id, account_id, f"Received response: {response.status_code}")
+                try:
+                    response = requests.post(ollama_api_url, headers=HEADERS, json={"query": system_prompt, "model": OLLAMA_MODEL}, timeout=30)
+                    log_debug(user_id, account_id, f"Received response: {response.status_code}")
+                except requests.exceptions.Timeout:
+                    log_debug(user_id, account_id, "Request timed out")
+                except requests.exceptions.ConnectionError:
+                    log_debug(user_id, account_id, "Connection error occurred")
+                except Exception as e:
+                    log_debug(user_id, account_id, f"Exception occurred: {e}")
+
                 response_str = None
                 if response.status_code == 200:
                     try:
