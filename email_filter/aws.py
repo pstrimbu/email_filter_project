@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from botocore.exceptions import ClientError, ProfileNotFound
 from email_filter.logger import update_log_entry
 from email_filter.globals import processing_status
+import inspect
 
 # Load environment variables from .env file
 load_dotenv()
@@ -79,13 +80,24 @@ class InstanceManager:
         return self._public_ip
 
     async def request_instance(self, user_id=None, account_id=None):
-        log_debug(user_id, account_id, "Entering request_instance function")
+        if self._public_ip:
+            log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {self._public_ip}")
+            return self._public_ip
         
         if self.request_in_progress:
             log_debug(user_id, account_id, "Request already in progress. Exiting.")
             await asyncio.sleep(5)
             return None
-        
+
+        if user_id is None:
+            caller = inspect.stack()[1].function
+            print(f"ERROR: request_instance: User ID cannot be None. Called from {caller}")
+            return
+        if account_id is None:
+            caller = inspect.stack()[1].function
+            print(f"ERROR: request_instance: Account ID cannot be None. Called from {caller}")
+            return
+                
         self.request_in_progress = True
         try:
             if not self.monitor_thread:
@@ -431,7 +443,6 @@ class SpotInstanceManager:
 
 async def monitor_instance_status(manager):
     """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
-    log_debug(manager.user_id, manager.account_id, "Entering monitor_instance_status function")
     no_active_users_since = None  # Track when no active users were first detected
 
     while True:
