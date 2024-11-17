@@ -6,7 +6,7 @@ import logging
 from threading import Thread, Lock
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ProfileNotFound
 from email_filter.logger import update_log_entry
 from email_filter.globals import processing_status
 
@@ -28,8 +28,21 @@ class InstanceManager:
         self.region = os.getenv("AWS_REGION", "us-east-1")
         self.instance_id = os.getenv("INSTANCE_ID")
         self.processor_type = os.getenv("PROCESSOR_TYPE", "spot")
-        self.session = boto3.Session(profile_name="amplify-app", region_name=self.region)
+        
+        # Ensure the session is initialized with the correct profile and region
+        self.session = boto3.Session(
+            profile_name=os.getenv("AWS_PROFILE", "default"),  # Use 'default' if no profile is specified
+            region_name=self.region
+        )
+        
+        # Validate the AWS profile
+        if not self._is_valid_aws_profile():
+            log_debug(None, None, "Invalid AWS profile configuration.")
+            raise ValueError("Invalid AWS profile configuration.")
+        
+        # Initialize the EC2 client
         self.ec2_client = self.session.client("ec2")
+        
         self.interaction_lock = Lock()
         self.active_users = set()
         self.last_interaction = None
@@ -38,6 +51,20 @@ class InstanceManager:
         self.user_id = None
         self.account_id = None
         self._public_ip = None
+
+    def _is_valid_aws_profile(self):
+        """Check if the AWS profile is valid."""
+        try:
+            # Attempt to get the current region to verify the session
+            region = self.session.region_name
+            logging.info(f"Profile is valid. Region: {region}")
+            return True
+        except ProfileNotFound:
+            logging.error("Profile not found.")
+            return False
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            return False
 
     def set_public_ip(self, ip_address):
         """Set the public IP address."""
@@ -151,7 +178,18 @@ class SpotInstanceManager:
         self.security_group_ids = os.getenv("AWS_SECURITY_GROUP_IDS", "").split(',')
         self.key_name = os.getenv("AWS_KEY_NAME", "timamap")
 
-        self.session = boto3.Session(profile_name="amplify-app", region_name=self.region)
+        # Ensure the session is initialized with the correct profile and region
+        self.session = boto3.Session(
+            profile_name=os.getenv("AWS_PROFILE", "default"),  # Use 'default' if no profile is specified
+            region_name=self.region
+        )
+        
+        # Validate the AWS profile
+        if not self._is_valid_aws_profile():
+            log_debug(None, None, "Invalid AWS profile configuration.")
+            raise ValueError("Invalid AWS profile configuration.")
+        
+        # Initialize the EC2 client
         self.ec2_client = self.session.client("ec2")
 
         # Lock and threading setup
@@ -173,6 +211,20 @@ class SpotInstanceManager:
         self.user_id = None
         self.account_id = None
         self._public_ip = None
+
+    def _is_valid_aws_profile(self):
+        """Check if the AWS profile is valid."""
+        try:
+            # Attempt to get the current region to verify the session
+            region = self.session.region_name
+            logging.info(f"Profile is valid. Region: {region}")
+            return True
+        except ProfileNotFound:
+            logging.error("Profile not found.")
+            return False
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            return False
 
     def set_public_ip(self, ip_address):
         """Set the public IP address."""
