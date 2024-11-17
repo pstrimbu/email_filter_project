@@ -113,6 +113,8 @@ class InstanceManager:
                 account_id = self.account_id
             else:
                 account_id = account_id
+
+            print(f"request_instance, user_id: {user_id}, account_id: {account_id}")
                 
             last_logged_time = datetime.now()
             self.active_users.add(user_id)
@@ -128,8 +130,8 @@ class InstanceManager:
                     instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
                     status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
                     if status == 'ok':
-                        update_log_entry(user_id, account_id, f"AI Server {self.instance_id} is now running and ready for requests.")
-                        logging.info(f"Instance {self.instance_id} is now running and ready for requests.")
+                        update_log_entry(user_id, account_id, f"AI Server {self.instance_id} is running and ready for requests.")
+                        logging.info(f"AI Server {self.instance_id} is running and ready for requests.")
                         break
 
                 # Log the current state every 30 seconds
