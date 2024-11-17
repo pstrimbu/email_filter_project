@@ -412,6 +412,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                 log_debug(user_id, account_id, f"Got public IP: {public_ip}")
                 manager.update_last_interaction()
                 if not public_ip:
+                    update_log_entry(user_id, account_id, f"No public IP found, requesting instance")
                     public_ip = await manager.request_instance(user_id, account_id)
             except Exception as e:
                 log_debug(user_id, account_id, f"Error requesting instance: {e}")

@@ -16,6 +16,12 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 
+# Debug flag
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+
+def log_debug(user_id, account_id, message):
+    if DEBUG_MODE:
+        update_log_entry(user_id, account_id, f"DEBUG: {message}")
 
 class InstanceManager:
     def __init__(self):
@@ -41,7 +47,8 @@ class InstanceManager:
         """Get the public IP address."""
         return self._public_ip
 
-    async def request_instance(self, user_id, account_id):
+    async def request_instance(self, user_id=None, account_id=None):
+        log_debug(user_id, account_id, "Entering request_instance function")
         try:
             if not self.monitor_thread:
                 self.monitor_thread = Thread(target=self.start_monitoring)
@@ -71,6 +78,7 @@ class InstanceManager:
                     instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
                     status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
                     if status == 'ok':
+                        update_log_entry(user_id, account_id, f"AI Server {self.instance_id} is now running and ready for requests.")
                         logging.info(f"Instance {self.instance_id} is now running and ready for requests.")
                         break
 
@@ -87,13 +95,14 @@ class InstanceManager:
             public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
             if public_ip:
                 self.set_public_ip(public_ip)
+                update_log_entry(user_id, account_id, f"AI Server active: {self.instance_id} has public IP: {public_ip}")    
                 logging.info(f"Instance {self.instance_id} has public IP: {public_ip}")
                 return public_ip
             else:
                 logging.error(f"Public IP not available for instance {self.instance_id}.")
                 return None
         except ClientError as e:
-            logging.error(f"Error managing on-demand instance: {e}")
+            log_debug(user_id, account_id, f"Error managing on-demand instance: {e}")
             return None
 
     def log(self, message):
@@ -178,6 +187,7 @@ class SpotInstanceManager:
         logging.info(message)
 
     async def request_instance(self, user_id=None, account_id=None):
+        log_debug(user_id, account_id, "Entering request_instance function")
         if not self.monitor_thread:
             self.monitor_thread = Thread(target=self.start_monitoring)
             self.monitor_thread.start()
@@ -198,7 +208,7 @@ class SpotInstanceManager:
 
             # If instance is already running, reuse it
             if self.instance_id:
-                self.log(f"Using existing instance with ID: {self.instance_id}")
+                log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id}")
                 public_ip = await self._get_instance_public_ip(self.instance_id)
                 if public_ip:
                     self.set_public_ip(public_ip)
@@ -241,6 +251,7 @@ class SpotInstanceManager:
                 return None
 
     async def _request_spot_instance(self, user_id, account_id):
+        log_debug(user_id, account_id, "Entering _request_spot_instance function")
         global processing_status
         """Request a new spot instance with retries."""
         for attempt in range(20):
@@ -269,6 +280,7 @@ class SpotInstanceManager:
         raise ClientError("Failed to request spot instance after multiple attempts.")
 
     async def _wait_for_instance_launch(self, user_id, account_id):
+        log_debug(user_id, account_id, "Entering _wait_for_instance_launch function")
         global processing_status
         """Wait for the spot instance to launch, then retrieve the public IP."""
         for attempt in range(20):
@@ -293,6 +305,7 @@ class SpotInstanceManager:
         return None
 
     async def _get_instance_public_ip(self, instance_id):
+        log_debug(None, None, f"Entering _get_instance_public_ip function for instance {instance_id}")
         """Retrieve the public IP of an instance asynchronously."""
         for attempt in range(5):
             try:
@@ -341,6 +354,7 @@ class SpotInstanceManager:
 
 async def monitor_instance_status(manager):
     """Shared monitoring logic for both InstanceManager and SpotInstanceManager."""
+    log_debug(None, None, "Entering monitor_instance_status function")
     no_active_users_since = None  # Track when no active users were first detected
 
     while True:
