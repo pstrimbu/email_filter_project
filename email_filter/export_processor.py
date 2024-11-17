@@ -488,7 +488,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                         return 2
 
                     print(f"call_ollama_api unexpected response {response_str}.")
-                    log_debug(user_id, account_id, f"Received unexpected response: {response_str[:300]}")
+                    log_debug(user_id, account_id, f"Received unexpected response: {response_str[:300] if len(response_str) >= 300 else response_str}")
                     return -2
 
                 elif response.status_code == 500:
