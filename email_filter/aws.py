@@ -54,6 +54,7 @@ class InstanceManager:
         self.user_id = None
         self.account_id = None
         self._public_ip = None
+        self.request_in_progress = False
 
     def _is_valid_aws_profile(self, user_id, account_id):
         """Check if the AWS profile is valid."""
@@ -79,6 +80,13 @@ class InstanceManager:
 
     async def request_instance(self, user_id=None, account_id=None):
         log_debug(user_id, account_id, "Entering request_instance function")
+        
+        if self.request_in_progress:
+            log_debug(user_id, account_id, "Request already in progress. Exiting.")
+            await asyncio.sleep(5)
+            return None
+        
+        self.request_in_progress = True
         try:
             if not self.monitor_thread:
                 self.monitor_thread = Thread(target=self.start_monitoring)
@@ -134,6 +142,8 @@ class InstanceManager:
         except ClientError as e:
             log_debug(user_id, account_id, f"Error managing on-demand instance: {e}")
             return None
+        finally:
+            self.request_in_progress = False
 
     def log(self, message):
         """Helper function to log messages with timestamps."""
@@ -214,6 +224,7 @@ class SpotInstanceManager:
         self.user_id = None
         self.account_id = None
         self._public_ip = None
+        self.request_in_progress = False
 
     def _is_valid_aws_profile(self, user_id, account_id):
         """Check if the AWS profile is valid."""
@@ -243,67 +254,78 @@ class SpotInstanceManager:
 
     async def request_instance(self, user_id=None, account_id=None):
         log_debug(user_id, account_id, "Entering request_instance function")
-        if not self.monitor_thread:
-            self.monitor_thread = Thread(target=self.start_monitoring)
-            self.monitor_thread.start()
+        
+        if self.request_in_progress:
+            log_debug(user_id, account_id, "Request already in progress. Exiting.")
+            await asyncio.sleep(5)
+            return None
+        
+        self.request_in_progress = True
+        try:
+            if not self.monitor_thread:
+                self.monitor_thread = Thread(target=self.start_monitoring)
+                self.monitor_thread.start()
 
-        if self.user_id:
-            self.user_id = user_id
-        else:
-            user_id = self.user_id
-
-        if self.account_id:
-            account_id = self.account_id
-        else:
-            account_id = account_id
-
-        """Requests or reuses a spot instance asynchronously."""
-        async with asyncio.Lock():
-            self.active_users.add(user_id)
-
-            # If instance is already running, reuse it
-            if self.instance_id:
-                log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id}")
-                public_ip = await self._get_instance_public_ip(self.instance_id)
-                if public_ip:
-                    self.set_public_ip(public_ip)
-                    update_log_entry(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {public_ip}")
-                else:
-                    update_log_entry(user_id, account_id, "Public IP not available for existing instance.", status='error')
-                return public_ip
+            if self.user_id:
+                self.user_id = user_id
             else:
-                update_log_entry(user_id, account_id, "No active AI Server found. Checking for other registered AI Servers.")
+                user_id = self.user_id
 
-            try:
-                response = self.ec2_client.describe_instances(
-                    Filters=[
-                        {'Name': 'instance-state-name', 'Values': ['running']},
-                        {'Name': 'instance-lifecycle', 'Values': ['spot']}
-                    ]
-                )
-                for reservation in response['Reservations']:
-                    for instance in reservation['Instances']:
-                        self.instance_id = instance['InstanceId']
-                        self.instance_launch_time = datetime.now()
-                        self.instance_is_active = True
-                        public_ip = await self._get_instance_public_ip(self.instance_id)
-                        if public_ip:
-                            self.set_public_ip(public_ip)
-                            update_log_entry(user_id, account_id, f"Found registered AI Server with ID: {self.instance_id} and public IP: {public_ip}")
-                            return public_ip
-            except ClientError as e:
-                self.log(f"Error checking for active spot instances: {e}")
+            if self.account_id:
+                account_id = self.account_id
+            else:
+                account_id = account_id
 
-            # Request a new spot instance
-            update_log_entry(user_id, account_id, "Requesting new AI Server.")
-            try:
-                response = await self._request_spot_instance(user_id, account_id)
-                self.spot_request_id = response["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
-                update_log_entry(user_id, account_id, f"AI Server requested with ID: {self.spot_request_id}")
-                return await self._wait_for_instance_launch(user_id, account_id)
-            except ClientError as e:
-                update_log_entry(user_id, account_id, f"Error requesting spot instance: {e}", status='error')
-                return None
+            """Requests or reuses a spot instance asynchronously."""
+            async with asyncio.Lock():
+                self.active_users.add(user_id)
+
+                # If instance is already running, reuse it
+                if self.instance_id:
+                    log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id}")
+                    public_ip = await self._get_instance_public_ip(self.instance_id)
+                    if public_ip:
+                        self.set_public_ip(public_ip)
+                        update_log_entry(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {public_ip}")
+                    else:
+                        update_log_entry(user_id, account_id, "Public IP not available for existing instance.", status='error')
+                    return public_ip
+                else:
+                    update_log_entry(user_id, account_id, "No active AI Server found. Checking for other registered AI Servers.")
+
+                try:
+                    response = self.ec2_client.describe_instances(
+                        Filters=[
+                            {'Name': 'instance-state-name', 'Values': ['running']},
+                            {'Name': 'instance-lifecycle', 'Values': ['spot']}
+                        ]
+                    )
+                    for reservation in response['Reservations']:
+                        for instance in reservation['Instances']:
+                            self.instance_id = instance['InstanceId']
+                            self.instance_launch_time = datetime.now()
+                            self.instance_is_active = True
+                            public_ip = await self._get_instance_public_ip(self.instance_id)
+                            if public_ip:
+                                self.set_public_ip(public_ip)
+                                update_log_entry(user_id, account_id, f"Found registered AI Server with ID: {self.instance_id} and public IP: {public_ip}")
+                                return public_ip
+                except ClientError as e:
+                    self.log(f"Error checking for active spot instances: {e}")
+
+                # Request a new spot instance
+                update_log_entry(user_id, account_id, "Requesting new AI Server.")
+                try:
+                    response = await self._request_spot_instance(user_id, account_id)
+                    self.spot_request_id = response["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
+                    update_log_entry(user_id, account_id, f"AI Server requested with ID: {self.spot_request_id}")
+                    return await self._wait_for_instance_launch(user_id, account_id)
+                except ClientError as e:
+                    update_log_entry(user_id, account_id, f"Error requesting spot instance: {e}", status='error')
+                    return None
+
+        finally:
+            self.request_in_progress = False
 
     async def _request_spot_instance(self, user_id, account_id):
         log_debug(user_id, account_id, "Entering _request_spot_instance function")
