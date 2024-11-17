@@ -142,18 +142,22 @@ class InstanceManager:
 
                 await asyncio.sleep(5)  # Adjusted to 5 seconds
 
+            print(f"request_instance, about to get public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
             # Retrieve the public IP address
             response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
             public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
             if public_ip:
-                self.set_public_ip(public_ip)
+                print(f"request_instance, got public IP: {public_ip}")
+                self._public_ip = public_ip
                 update_log_entry(user_id, account_id, f"AI Server active: {self.instance_id} has public IP: {public_ip}")    
                 logging.info(f"Instance {self.instance_id} has public IP: {public_ip}")
                 return public_ip
             else:
+                print(f"request_instance, no public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
                 logging.error(f"Public IP not available for instance {self.instance_id}.")
                 return None
         except ClientError as e:
+            print(f"request_instance, error: {e}")
             log_debug(user_id, account_id, f"Error managing on-demand instance: {e}")
             return None
         finally:
