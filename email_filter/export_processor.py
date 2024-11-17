@@ -58,14 +58,22 @@ def log_debug(user_id, account_id, message):
 def stop(user_id, account_id):
     log_debug(user_id, account_id, "Entering stop function")
     try:
-        for task in tasks:
-            task.close()
-            tasks.remove(task)
+        # Retry loop with backoff
+        max_retries = 20
+        backoff_factor = 0.5
+        for attempt in range(max_retries):
+            for task in tasks:
+                task.cancel()
+                tasks.remove(task)
+            if len(tasks) == 0:
+                update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
+                break
+            else:
+                update_log_entry(user_id, account_id, f"Stop request received. Waiting for tasks to complete. Attempt {attempt + 1}/{max_retries}", status='stopping')
+                time.sleep(backoff_factor * (2 ** attempt))  # Exponential backoff
 
-        if len(tasks) == 0:
-            update_log_entry(user_id, account_id, "Stopped by user request.", status='finished')
-        else:
-            update_log_entry(user_id, account_id, "Stop request received.", status='stopping')
+        if len(tasks) > 0:
+            update_log_entry(user_id, account_id, "Tasks did not complete in time.", status='error')
             processing_status[(user_id, account_id)] = 'stopping'
     except Exception as e:
         log_debug(user_id, account_id, f"Exception in stop: {e}")
