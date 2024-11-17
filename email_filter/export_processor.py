@@ -327,6 +327,7 @@ async def process_prompts(user_id, account_id):
                         return {'success': False, 'error': 'stopped by user request'}
                     
                     # task = call_ollama_api(prompt.prompt_text, email, user_id, account_id)
+                    print(f"calling call_ollama_api, user_id: {user_id}, account_id: {account_id}")
                     task = asyncio.create_task(call_ollama_api(prompt.prompt_text, email, user_id, account_id))
                     
                     tasks.append(task)
@@ -393,7 +394,7 @@ async def process_prompts(user_id, account_id):
 
 
 async def call_ollama_api(prompt_text, email, user_id, account_id):
-    log_debug(user_id, account_id, "Entering call_ollama_api function")
+    log_debug(user_id, account_id, f"Entering call_ollama_api function, user_id: {user_id}, account_id: {account_id}")
     global processing_status, included, excluded, refused, errored, unexpected, last_log_time, start_time, total_emails
     """Call Ollama API with retries."""
 

@@ -20,13 +20,6 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 # Debug flag
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
-def log_debug(user_id, account_id, message):
-    if not user_id or not account_id:
-        logging.error(f"User ID or account ID is None. Cannot log debug message: {message}")
-        return
-    if DEBUG_MODE:
-        update_log_entry(user_id, account_id, f"DEBUG: {message}")
-
 class InstanceManager:
     def __init__(self):
         self.region = os.getenv("AWS_REGION", "us-east-1")
@@ -41,7 +34,7 @@ class InstanceManager:
         
         # Validate the AWS profile
         if not self._is_valid_aws_profile():
-            log_debug(None, None, "Invalid AWS profile configuration.")
+            print("Invalid AWS profile configuration.")
             raise ValueError("Invalid AWS profile configuration.")
         
         # Initialize the EC2 client
@@ -81,11 +74,11 @@ class InstanceManager:
 
     async def request_instance(self, user_id=None, account_id=None):
         if self._public_ip:
-            log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {self._public_ip}")
+            print(f"Using existing instance with ID: {self.instance_id} and public IP: {self._public_ip}")
             return self._public_ip
         
         if self.request_in_progress:
-            log_debug(user_id, account_id, "Request already in progress. Exiting.")
+            print("Request already in progress. Exiting.")
             await asyncio.sleep(5)
             return None
 
@@ -145,20 +138,18 @@ class InstanceManager:
             print(f"request_instance, about to get public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
             # Retrieve the public IP address
             response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
-            public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
-            if public_ip:
-                print(f"request_instance, got public IP: {public_ip}")
-                self._public_ip = public_ip
-                update_log_entry(user_id, account_id, f"AI Server active: {self.instance_id} has public IP: {public_ip}")    
-                logging.info(f"Instance {self.instance_id} has public IP: {public_ip}")
-                return public_ip
+            self._public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
+            if self._public_ip:
+                print(f"request_instance, got public IP: {self._public_ip}")
+                update_log_entry(user_id, account_id, f"AI Server active: {self.instance_id} has public IP: {self._public_ip}")    
+                logging.info(f"Instance {self.instance_id} has public IP: {self._public_ip}")
+                return self._public_ip
             else:
                 print(f"request_instance, no public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
                 logging.error(f"Public IP not available for instance {self.instance_id}.")
                 return None
         except ClientError as e:
             print(f"request_instance, error: {e}")
-            log_debug(user_id, account_id, f"Error managing on-demand instance: {e}")
             return None
         finally:
             self.request_in_progress = False
@@ -217,7 +208,7 @@ class SpotInstanceManager:
         
         # Validate the AWS profile
         if not self._is_valid_aws_profile():
-            log_debug(None, None, "Invalid AWS profile configuration.")
+            print("Invalid AWS profile configuration.")
             raise ValueError("Invalid AWS profile configuration.")
         
         # Initialize the EC2 client
@@ -271,10 +262,10 @@ class SpotInstanceManager:
         logging.info(message)
 
     async def request_instance(self, user_id=None, account_id=None):
-        log_debug(user_id, account_id, "Entering request_instance function")
+        print("Entering request_instance function")
         
         if self.request_in_progress:
-            log_debug(user_id, account_id, "Request already in progress. Exiting.")
+            print("Request already in progress. Exiting.")
             await asyncio.sleep(5)
             return None
         
@@ -300,7 +291,7 @@ class SpotInstanceManager:
 
                 # If instance is already running, reuse it
                 if self.instance_id:
-                    log_debug(user_id, account_id, f"Using existing instance with ID: {self.instance_id}")
+                    print(f"Using existing instance with ID: {self.instance_id}")
                     public_ip = await self._get_instance_public_ip(self.instance_id)
                     if public_ip:
                         self.set_public_ip(public_ip)
@@ -346,7 +337,7 @@ class SpotInstanceManager:
             self.request_in_progress = False
 
     async def _request_spot_instance(self, user_id, account_id):
-        log_debug(user_id, account_id, "Entering _request_spot_instance function")
+        print("Entering _request_spot_instance function")
         global processing_status
         """Request a new spot instance with retries."""
         for attempt in range(20):
@@ -375,7 +366,7 @@ class SpotInstanceManager:
         raise ClientError("Failed to request spot instance after multiple attempts.")
 
     async def _wait_for_instance_launch(self, user_id, account_id):
-        log_debug(user_id, account_id, "Entering _wait_for_instance_launch function")
+        print("Entering _wait_for_instance_launch function")
         global processing_status
         """Wait for the spot instance to launch, then retrieve the public IP."""
         for attempt in range(20):
@@ -400,7 +391,7 @@ class SpotInstanceManager:
         return None
 
     async def _get_instance_public_ip(self, instance_id, user_id, account_id):
-        log_debug(user_id, account_id, f"Entering _get_instance_public_ip function for instance {instance_id}")
+        print(f"Entering _get_instance_public_ip function for instance {instance_id}")
         """Retrieve the public IP of an instance asynchronously."""
         for attempt in range(5):
             try:
