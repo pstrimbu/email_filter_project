@@ -196,6 +196,7 @@ def init_routes(app):
 
         if request.method == 'POST':
             if email_form.validate_on_submit():
+
                 try:
                     # Convert 'y'/'n' to True/False
                     imap_use_ssl = email_form.imap_use_ssl.data.lower() == 'y'
@@ -204,11 +205,18 @@ def init_routes(app):
                         email=email_form.email_address.data,
                         password=email_form.password.data,
                         provider=email_form.email_type.data,
-                        imap_server=email_form.imap_server.data,
-                        imap_port=int(email_form.imap_port.data),  # Ensure port is an integer
-                        imap_use_ssl=imap_use_ssl,
                         user_id=current_user.id
                     )
+
+                    if email_form.email_type.data == 'GMAIL':
+                        new_account.imap_server = 'imap.gmail.com'
+                        new_account.imap_port = 993
+                        new_account.imap_use_ssl = True
+                    elif email_form.email_type.data == 'APPLE':
+                        new_account.imap_server = 'imap.mail.me.com'
+                        new_account.imap_port = 993
+                        new_account.imap_use_ssl = True
+
                     db.session.add(new_account)
                     db.session.commit()
                     return jsonify(success=True, message='Email account added successfully!', account_id=new_account.id)
@@ -225,24 +233,37 @@ def init_routes(app):
     def email_account_edit(account_id):
         account_id = int(account_id)
         account = EmailAccount.query.get_or_404(account_id)
-        form = EmailAccountForm(obj=account)
+        form = EmailAccountForm(obj=account, is_edit=True)
 
-        if form.validate_on_submit():
-            try:
-                # Only update the password if a new one is provided
-                if form.password.data and form.password.data != '*' * len(account.password):
-                    account.password = form.password.data
-                else:
-                    form.password.data = account.password  # Keep the existing password
+        if request.method == 'POST':
+            if form.validate_on_submit():
+                try:
+                    # Only update the password if a new one is provided
+                    if form.password.data and form.password.data != '*' * len(account.password):
+                        account.password = form.password.data
+                    else:
+                        form.password.data = account.password  # Keep the existing password
 
-                form.populate_obj(account)  # Update other fields
-                db.session.commit()  # Save changes to the database
-                return jsonify(success=True, message='Account updated successfully!')
-            except Exception as e:
-                db.session.rollback()  # Rollback the session in case of an error
-                return jsonify(success=False, error=str(e))
+                    if form.email_type.data == 'GMAIL':
+                        account.imap_server = 'imap.gmail.com'
+                        account.imap_port = 993
+                        account.imap_use_ssl = True
+                    elif form.email_type.data == 'APPLE':
+                        account.imap_server = 'imap.mail.me.com'
+                        account.imap_port = 993
+                        account.imap_use_ssl = True
 
-        # Obfuscate the password for display
+                    form.populate_obj(account)  # Update other fields
+                    db.session.commit()  # Save changes to the database
+                    return jsonify(success=True, message='Account updated successfully!')
+                except Exception as e:
+                    db.session.rollback()  # Rollback the session in case of an error
+                    return jsonify(success=False, error=str(e))
+            else:
+                # Handle form validation errors
+                return jsonify(success=False, error=form.errors)
+
+        # For GET request, obfuscate the password for display
         account.password = '*' * len(account.password)
         return render_template('email_account_edit.html', email_form=form, account=account)
 

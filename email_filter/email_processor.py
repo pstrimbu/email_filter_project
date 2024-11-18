@@ -89,7 +89,6 @@ def connect_email_server(data):
         # Use the provided server details directly
         email_client = IMAP4_SSL(data['imap_server'], int(data['imap_port'])) if data['imap_use_ssl'] else IMAP4_SSL(data['imap_server'])
         email_client.login(data['email_address'], data['password'])
-        # email_client.select("inbox")
         return email_client
     except Exception as e:
         raise Exception(f"Connection failed: {str(e)}")

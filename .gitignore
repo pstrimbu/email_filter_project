@@ -5,6 +5,7 @@ email_filter/__pycache__/
 email_filter/.DS_Store
 email_filter/.venv
 email_filter/.vscode
+pst-to-gmail/
 *.db
 *.db-journal
 *.db-shm
