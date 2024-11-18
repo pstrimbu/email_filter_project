@@ -197,10 +197,7 @@ def init_routes(app):
         if request.method == 'POST':
             if email_form.validate_on_submit():
 
-                try:
-                    # Convert 'y'/'n' to True/False
-                    imap_use_ssl = email_form.imap_use_ssl.data.lower() == 'y'
-                    
+                try:                  
                     new_account = EmailAccount(
                         email=email_form.email_address.data,
                         password=email_form.password.data,
@@ -351,7 +348,7 @@ def init_routes(app):
         return read_imap_emails(email_account, current_user.id)
 
 
-    def test_email_connection_logic(email_address, password, email_type, server=None, port=None, use_ssl=None):
+    def test_email_connection_logic(email_address, password, email_type):
         try:
             # Automatically set server details based on email type
             if email_type == 'GMAIL':
@@ -378,9 +375,6 @@ def init_routes(app):
         email_address = request.form.get('email_address')
         password = request.form.get('password')
         email_type = request.form.get('email_type')
-        server = request.form.get('imap_server')
-        port = int(request.form.get('imap_port'))
-        use_ssl = request.form.get('imap_use_ssl') == 'y'
 
         # Use the shared logic to test the connection
         success, error = test_email_connection_logic(email_address, password, email_type, server, port, use_ssl)
@@ -405,12 +399,9 @@ def init_routes(app):
         email_address = account.email
         password = account.password
         email_type = account.provider
-        server = account.imap_server
-        port = account.imap_port
-        use_ssl = account.imap_use_ssl
 
         # Use the shared logic to test the connection
-        success, error = test_email_connection_logic(email_address, password, email_type, server, port, use_ssl)
+        success, error = test_email_connection_logic(email_address, password, email_type)
 
         if success:
             return jsonify(success=True)

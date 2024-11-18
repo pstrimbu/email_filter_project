@@ -29,11 +29,6 @@
             </small>
         </div>
 
-        <!-- Hidden fields for IMAP settings -->
-        <input type="hidden" id="imapServer" name="imap_server" value="{{ account.imap_server }}">
-        <input type="hidden" id="imapPort" name="imap_port" value="{{ account.imap_port }}">
-        <input type="hidden" id="imapUseSsl" name="imap_use_ssl" value="{{ 'y' if account.imap_use_ssl else 'n' }}">
-
         <div class="form-group d-flex justify-content-between mt-3">
             <button type="button" class="btn btn-warning" id="testConnectionButton" data-account-id="{{ account.id }}">Test Connection</button>
             <div>
