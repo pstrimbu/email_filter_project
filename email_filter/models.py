@@ -41,7 +41,7 @@ class Email(db.Model):
     email_id = db.Column(db.String(255), nullable=False)
     email_date = db.Column(db.DateTime, nullable=False)
     sender = db.Column(db.String(120), nullable=False, index=True)
-    receivers = db.Column(db.Text, nullable=False, index=True)
+    receivers = db.Column(db.Text, nullable=False)
     action = db.Column(db.String(20), nullable=False, default='ignore')
     folder = db.Column(db.String(100), nullable=False)
     raw_data = db.Column(LONGBLOB, nullable=False)
@@ -49,7 +49,8 @@ class Email(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'account_id', 'email_id', name='uq_user_account_email'),
-        db.Index('ix_email_text_content', 'text_content', mysql_prefix='FULLTEXT')
+        db.Index('ix_email_text_content', 'text_content', mysql_prefix='FULLTEXT'),
+        db.Index('ix_email_receivers', 'receivers', mysql_length=255),
     )
 
     def __repr__(self):
