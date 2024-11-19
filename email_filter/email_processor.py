@@ -293,18 +293,31 @@ def read_imap_emails(account, user_id):
 
                                     receivers_str = ','.join(all_recipients_emails)
 
-                                    email = Email(
+                                    # Check if the email already exists
+                                    existing_email = Email.query.filter_by(
                                         user_id=user_id,
                                         account_id=account.id,
-                                        email_id=email_id,
-                                        email_date=email_date,
-                                        sender=sender_email,
-                                        receivers=receivers_str,
-                                        folder=mailbox_name,
-                                        raw_data=raw_email_data,
-                                        text_content=text_content
-                                    )
-                                    db.session.add(email)
+                                        email_id=email_id
+                                    ).first()
+
+                                    if existing_email:
+                                        # Update existing email if necessary
+                                        existing_email.raw_data = raw_email_data
+                                        # Update other fields as needed
+                                    else:
+                                        # Create a new email record
+                                        email = Email(
+                                            user_id=user_id,
+                                            account_id=account.id,
+                                            email_id=email_id,
+                                            email_date=email_date,
+                                            sender=sender_email,
+                                            receivers=receivers_str,
+                                            folder=mailbox_name,
+                                            raw_data=raw_email_data,
+                                            text_content=text_content
+                                        )
+                                        db.session.add(email)
 
                             # Insert new email addresses into the EmailAddress table
                             new_email_addresses = unique_email_addresses - existing_email_addresses
