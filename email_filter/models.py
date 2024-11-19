@@ -40,8 +40,8 @@ class Email(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey('email_account.id', ondelete='CASCADE'), nullable=False)
     email_id = db.Column(db.String(255), nullable=False)
     email_date = db.Column(db.DateTime, nullable=False)
-    sender = db.Column(db.String(120), nullable=False)
-    receivers = db.Column(db.Text, nullable=False)
+    sender = db.Column(db.String(120), nullable=False, index=True)
+    receivers = db.Column(db.Text, nullable=False, index=True)
     action = db.Column(db.String(20), nullable=False, default='ignore')
     folder = db.Column(db.String(100), nullable=False)
     raw_data = db.Column(LONGBLOB, nullable=False)
@@ -57,7 +57,7 @@ class Email(db.Model):
 
 class EmailAddress(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), nullable=False, index=True)
     state = db.Column(Enum('include', 'ignore', 'exclude', name='email_state'), nullable=False, default='ignore')
     email_account_id = db.Column(db.Integer, db.ForeignKey('email_account.id', ondelete='CASCADE', name='fk_email_address_email_account'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE', name='fk_email_address_user'), nullable=False)
