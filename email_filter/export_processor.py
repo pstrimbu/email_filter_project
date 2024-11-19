@@ -559,11 +559,14 @@ def generate_files(user_id, account_id):
 
     email_address = email_account.email
     timestamp = datetime.now().strftime('%Y%m%d%H%M')
+     
     if email_account.start_date is not None and email_account.end_date is not None:
         date_range = f"{email_account.start_date.strftime('%Y%m%d')}-{email_account.end_date.strftime('%Y%m%d')}"
         mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
+        zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
     else:
         mbox_filename = f"{email_address}-{timestamp}.mbox"
+        zip_filename = f"{email_address}-{timestamp}.zip"
 
     zip_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
     mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
@@ -575,7 +578,6 @@ def generate_files(user_id, account_id):
     finally:
         mbox.close()
 
-    zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
     with tempfile.NamedTemporaryFile(delete=False) as temp_zip_file:
         zip_path = temp_zip_file.name
         pyminizip.compress(mbox_path, None, zip_path, zip_password, 5)
