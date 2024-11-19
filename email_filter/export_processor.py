@@ -548,7 +548,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                 last_log_time = current_time
     log_debug(user_id, account_id, f"call_ollama_api: returning -2")
     return -2
-    log_debug(user_id, account_id, "Exiting call_ollama_api function")
+
 
 def generate_files(user_id, account_id):
     log_debug(user_id, account_id, "Entering generate_files function")
@@ -558,9 +558,12 @@ def generate_files(user_id, account_id):
         raise ValueError(f"No EmailAccount found for account_id: {account_id}")
 
     email_address = email_account.email
-    date_range = f"{email_account.start_date.strftime('%Y%m%d')}-{email_account.end_date.strftime('%Y%m%d')}"
     timestamp = datetime.now().strftime('%Y%m%d%H%M')
-    mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
+    if email_account.start_date is not None and email_account.end_date is not None:
+        date_range = f"{email_account.start_date.strftime('%Y%m%d')}-{email_account.end_date.strftime('%Y%m%d')}"
+        mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
+    else:
+        mbox_filename = f"{email_address}-{timestamp}.mbox"
 
     zip_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
     mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
@@ -594,4 +597,3 @@ def generate_files(user_id, account_id):
     os.remove(zip_path)
 
     return zip_filename, presigned_url
-    log_debug(user_id, account_id, "Exiting generate_files function")
