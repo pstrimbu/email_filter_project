@@ -234,7 +234,7 @@ def read_imap_emails(account, user_id):
                         email_ids = sorted(set(email_ids))
 
                         # Fetch emails in batches
-                        batch_size = 10  # Define the number of emails to fetch at once
+                        batch_size = 100  # Define the number of emails to fetch at once
                         for i in range(0, len(email_ids), batch_size):
                             # Check if scan_status is "stopping"
                             if scan_status.get((user_id, account.id)) == 'stopping':
