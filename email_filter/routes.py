@@ -463,12 +463,16 @@ def init_routes(app):
             ).outerjoin(
                 Email, or_(
                     Email.sender == EmailAddress.email,
-                    Email.receivers.like(f"%{EmailAddress.email}%")  # Use LIKE for pattern matching
+                    Email.receivers.like(f"%{EmailAddress.email}%")  # Consider alternatives to leading wildcard
                 )
             ).filter(
                 EmailAccount.user_id == current_user.id,
                 EmailAccount.id == account_id
-            ).group_by(EmailAddress.id, EmailAddress.email).order_by(func.count(func.distinct(Email.id)).desc()).all()
+            ).group_by(
+                EmailAddress.id, EmailAddress.email, EmailAddress.state
+            ).order_by(
+                func.count(func.distinct(Email.id)).desc()
+            ).all()
         except Exception as e:
             flash(f'Error fetching email addresses: {str(e)}', 'danger')
             return redirect(url_for('some_default_view'))  # Redirect to a default view if there's an error 
