@@ -247,79 +247,82 @@ def read_imap_emails(account, user_id):
                                 # Fetch the entire raw email content
                                 status, msg_data = email_client.fetch(batch_ids_str, "(BODY.PEEK[])")
                                 for response_part in msg_data:
-                                    if isinstance(response_part, tuple):
-                                        raw_email_data = response_part[1]
-                                        email_message = BytesParser(policy=default).parsebytes(raw_email_data)
+                                    try:
+                                        if isinstance(response_part, tuple):
+                                            raw_email_data = response_part[1]
+                                            email_message = BytesParser(policy=default).parsebytes(raw_email_data)
 
-                                        # Extract email metadata
-                                        metadata = {
-                                            "From": email_message.get("From"),
-                                            "To": email_message.get("To"),
-                                            "Date": email_message.get("Date"),
-                                            "Subject": email_message.get("Subject")
-                                        }
+                                            # Extract email metadata
+                                            metadata = {
+                                                "From": email_message.get("From"),
+                                                "To": email_message.get("To"),
+                                                "Date": email_message.get("Date"),
+                                                "Subject": email_message.get("Subject")
+                                            }
 
-                                        email_id = response_part[0].split()[0].decode()
-                                        sender = metadata["From"]
-                                        sender_email = getaddresses([sender])[0][1].lower()
+                                            email_id = response_part[0].split()[0].decode()
+                                            sender = metadata["From"]
+                                            sender_email = getaddresses([sender])[0][1].lower()
 
-                                        to_recipients = email_message.get_all('To', [])
-                                        cc_recipients = email_message.get_all('Cc', [])
-                                        bcc_recipients = email_message.get_all('Bcc', [])
-                                        all_recipients = getaddresses(to_recipients + cc_recipients + bcc_recipients)
-                                        all_recipients_emails = [email[1].lower() for email in all_recipients if email[1]]
+                                            to_recipients = email_message.get_all('To', [])
+                                            cc_recipients = email_message.get_all('Cc', [])
+                                            bcc_recipients = email_message.get_all('Bcc', [])
+                                            all_recipients = getaddresses(to_recipients + cc_recipients + bcc_recipients)
+                                            all_recipients_emails = [email[1].lower() for email in all_recipients if email[1]]
 
-                                        # Add sender and recipients to the unique email addresses set
-                                        if sender_email:
-                                            unique_email_addresses.add(sender_email)
-                                        unique_email_addresses.update(all_recipients_emails)
+                                            # Add sender and recipients to the unique email addresses set
+                                            if sender_email:
+                                                unique_email_addresses.add(sender_email)
+                                            unique_email_addresses.update(all_recipients_emails)
 
-                                        email_date = parsedate_to_datetime(metadata["Date"]).strftime('%Y-%m-%d %H:%M:%S')
+                                            email_date = parsedate_to_datetime(metadata["Date"]).strftime('%Y-%m-%d %H:%M:%S')
 
-                                        body = email_message.get_body(preferencelist=('plain'))
-                                        if body is not None:
-                                            content = body.get_content()
-                                        else:
-                                            body = email_message.get_body(preferencelist=('html'))
+                                            body = email_message.get_body(preferencelist=('plain'))
                                             if body is not None:
-                                                html_content = body.get_content()
-                                                soup = BeautifulSoup(html_content, 'html.parser')
-                                                content = soup.get_text()
+                                                content = body.get_content()
                                             else:
-                                                content = "No content available"
+                                                body = email_message.get_body(preferencelist=('html'))
+                                                if body is not None:
+                                                    html_content = body.get_content()
+                                                    soup = BeautifulSoup(html_content, 'html.parser')
+                                                    content = soup.get_text()
+                                                else:
+                                                    content = "No content available"
 
-                                        email_subject = email_message['Subject']
-                                        email_body = ' '.join(content.split())
-                                        text_content = f"{email_subject} {email_body}"
+                                            email_subject = email_message['Subject']
+                                            email_body = ' '.join(content.split())
+                                            text_content = f"{email_subject} {email_body}"
 
-                                        receivers_str = ','.join(all_recipients_emails)
+                                            receivers_str = ','.join(all_recipients_emails)
 
-                                        # Check if the email already exists
-                                        existing_email = Email.query.filter_by(
-                                            user_id=user_id,
-                                            account_id=account.id,
-                                            email_id=email_id
-                                        ).first()
-
-                                        if existing_email:
-                                            # Update existing email if necessary
-                                            existing_email.raw_data = raw_email_data
-                                            # Update other fields as needed
-                                        else:
-                                            # Create a new email record
-                                            email = Email(
+                                            # Check if the email already exists
+                                            existing_email = Email.query.filter_by(
                                                 user_id=user_id,
                                                 account_id=account.id,
-                                                email_id=email_id,
-                                                email_date=email_date,
-                                                sender=sender_email,
-                                                receivers=receivers_str,
-                                                folder=mailbox_name,
-                                                raw_data=raw_email_data,
-                                                text_content=text_content
-                                            )
-                                            db.session.add(email)
+                                                email_id=email_id
+                                            ).first()
 
+                                            if existing_email:
+                                                # Update existing email if necessary
+                                                existing_email.raw_data = raw_email_data
+                                                # Update other fields as needed
+                                            else:
+                                                # Create a new email record
+                                                email = Email(
+                                                    user_id=user_id,
+                                                    account_id=account.id,
+                                                    email_id=email_id,
+                                                    email_date=email_date,
+                                                    sender=sender_email,
+                                                    receivers=receivers_str,
+                                                    folder=mailbox_name,
+                                                    raw_data=raw_email_data,
+                                                    text_content=text_content
+                                                )
+                                                db.session.add(email)
+                                    except Exception as e:
+                                        print(f"Error processing email {email_id}: {e}")
+                                        continue
                                 # Insert new email addresses into the EmailAddress table
                                 new_email_addresses = unique_email_addresses - existing_email_addresses
                                 for email_address in new_email_addresses:
