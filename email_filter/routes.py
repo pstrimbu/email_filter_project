@@ -463,7 +463,7 @@ def init_routes(app):
             ).outerjoin(
                 Email, or_(
                     Email.sender == EmailAddress.email,
-                    func.instr(Email.receivers, EmailAddress.email) > 0
+                    Email.receivers.like(f"%{EmailAddress.email}%")  # Use LIKE for pattern matching
                 )
             ).filter(
                 EmailAccount.user_id == current_user.id,
