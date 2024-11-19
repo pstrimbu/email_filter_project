@@ -1277,43 +1277,4 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    function updateImapSettings() {
-        const emailTypeSelect = document.getElementById('emailTypeSelect');
-        const imapServer = document.getElementById('imapServer');
-        const imapPort = document.getElementById('imapPort');
-        const imapUseSsl = document.getElementById('imapUseSsl');
-
-        if (emailTypeSelect.value === 'GMAIL') {
-            imapServer.value = 'imap.gmail.com';
-            imapPort.value = '993';
-            imapUseSsl.value = 'y';
-        } else if (emailTypeSelect.value === 'APPLE') {
-            imapServer.value = 'imap.mail.me.com';
-            imapPort.value = '993';
-            imapUseSsl.value = 'y';
-        }
-    }
-
-    // document.addEventListener('submit', function(e) {
-    //     if (e.target.matches('#datesForm')) {
-    //         e.preventDefault();
-    //         const startDate = document.getElementById('start_date').value;
-    //         const endDate = document.getElementById('end_date').value;
-    //         const limitDatesChecked = document.getElementById('limitDates').checked;
-
-    //         // Update the navbar dropdown with the new dates only if the form is submitted
-    //         const selectedOption = emailAccountSelect.querySelector(`option[value="${selectedAccountId}"]`);
-    //         if (selectedOption) {
-    //             const email = selectedOption.textContent.trim().split(' ')[0]; // Assuming email is the first part
-    //             if (limitDatesChecked) {
-    //                 selectedOption.textContent = `${email} (${startDate} - ${endDate})`;
-    //             } else {
-    //                 selectedOption.textContent = email; // Remove dates from the text
-    //             }
-    //         }
-
-    //         submitForm(e.target, '/dates');
-    //     }
-    // });
-
 });

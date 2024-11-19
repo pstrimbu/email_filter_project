@@ -52,7 +52,6 @@ def extract_human_readable_text(content):
         content_to_use = html_content if html_content else plain_text_content
 
         if content_to_use is None:
-            # print("Warning: No HTML or plain text content found.")
             return ""
 
         # Use a more forgiving parser
@@ -209,8 +208,8 @@ def read_imap_emails(account, user_id):
         EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).delete()
         db.session.commit()
 
-        # Fetch existing email addresses
-        existing_email_addresses = {email_address.email for email_address in EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).all()}
+        # Initialize an empty set for existing email addresses since they were just deleted
+        existing_email_addresses = set()
 
         # Initialize a set to keep track of unique email addresses
         unique_email_addresses = set()
@@ -230,32 +229,37 @@ def read_imap_emails(account, user_id):
                     if status == "OK":
                         # Convert email_ids_data from bytes to a list of strings
                         email_ids = email_ids_data[0].decode().split() if email_ids_data[0] else []
+                        
+                        # Sort and filter for unique email IDs
+                        email_ids = sorted(set(email_ids))
 
-                        for i in range(0, len(email_ids), 100):
+                        # Fetch emails in batches
+                        batch_size = 10  # Define the number of emails to fetch at once
+                        for i in range(0, len(email_ids), batch_size):
                             # Check if scan_status is "stopping"
                             if scan_status.get((user_id, account.id)) == 'stopping':
                                 return {'success': False, 'error': 'stopped by user request'}
 
-                            batch_ids = email_ids[i:i + 100]
+                            batch_ids = email_ids[i:i + batch_size]
                             batch_ids_str = ','.join(batch_ids)
-                            status, data = email_client.fetch(batch_ids_str, '(UID RFC822)')
-                            if status != "OK":
-                                print(f"Failed to fetch emails in batch: {batch_ids}")
-                                continue
 
-                            for response_part in data:
+                            # Fetch the entire raw email content
+                            status, msg_data = email_client.fetch(batch_ids_str, "(BODY.PEEK[])")
+                            for response_part in msg_data:
                                 if isinstance(response_part, tuple):
-                                    email_uid = None
-                                    email_id_info = response_part[0].decode()
-                                    email_id_match = re.match(r'(\d+) \(UID (\d+)', email_id_info)
-                                    if email_id_match:
-                                        email_uid = email_id_match.group(2)
-
                                     raw_email_data = response_part[1]
                                     email_message = BytesParser(policy=default).parsebytes(raw_email_data)
 
-                                    # Extract email details
-                                    sender = email_message['From']
+                                    # Extract email metadata
+                                    metadata = {
+                                        "From": email_message.get("From"),
+                                        "To": email_message.get("To"),
+                                        "Date": email_message.get("Date"),
+                                        "Subject": email_message.get("Subject")
+                                    }
+
+                                    email_id = response_part[0].split()[0].decode()
+                                    sender = metadata["From"]
                                     sender_email = getaddresses([sender])[0][1].lower()
 
                                     to_recipients = email_message.get_all('To', [])
@@ -269,7 +273,7 @@ def read_imap_emails(account, user_id):
                                         unique_email_addresses.add(sender_email)
                                     unique_email_addresses.update(all_recipients_emails)
 
-                                    email_date = parsedate_to_datetime(email_message['Date']).strftime('%Y-%m-%d %H:%M:%S')
+                                    email_date = parsedate_to_datetime(metadata["Date"]).strftime('%Y-%m-%d %H:%M:%S')
 
                                     body = email_message.get_body(preferencelist=('plain'))
                                     if body is not None:
@@ -292,7 +296,7 @@ def read_imap_emails(account, user_id):
                                     email = Email(
                                         user_id=user_id,
                                         account_id=account.id,
-                                        email_id=email_uid,
+                                        email_id=email_id,
                                         email_date=email_date,
                                         sender=sender_email,
                                         receivers=receivers_str,
@@ -304,10 +308,10 @@ def read_imap_emails(account, user_id):
 
                             # Insert new email addresses into the EmailAddress table
                             new_email_addresses = unique_email_addresses - existing_email_addresses
-                            for email in new_email_addresses:
-                                if email not in existing_email_addresses:
-                                    existing_email_addresses.add(email)
-                                    new_email_address = EmailAddress(user_id=user_id, email_account_id=account.id, email=email)
+                            for email_address in new_email_addresses:
+                                if email_address not in existing_email_addresses:
+                                    existing_email_addresses.add(email_address)
+                                    new_email_address = EmailAddress(user_id=user_id, email_account_id=account.id, email=email_address)
                                     db.session.add(new_email_address)
 
                             # Commit after processing each batch

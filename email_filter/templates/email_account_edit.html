@@ -5,7 +5,7 @@
 
         <div class="form-group">
             {{ email_form.email_type.label(class="form-label", for="emailTypeSelect") }}
-            <select id="emailTypeSelect" name="email_type" class="form-control" onchange="updateImapSettings()">
+            <select id="emailTypeSelect" name="email_type" class="form-control">
                 <option value="GMAIL" {% if account.provider == 'GMAIL' %}selected{% endif %}>GMAIL</option>
                 <option value="APPLE" {% if account.provider == 'APPLE' %}selected{% endif %}>APPLE</option>
             </select>

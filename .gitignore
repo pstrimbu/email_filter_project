@@ -6,6 +6,7 @@ email_filter/.DS_Store
 email_filter/.venv
 email_filter/.vscode
 pst-to-gmail/
+emails/
 *.db
 *.db-journal
 *.db-shm

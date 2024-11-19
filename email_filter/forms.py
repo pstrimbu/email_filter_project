@@ -47,6 +47,9 @@ class EmailAccountForm(FlaskForm):
     email_address = StringField('Email Address', validators=[DataRequired(), Email()])
     password = PasswordField('App Password', validators=[Optional()])
     email_type = SelectField('Email Type', choices=[('GMAIL', 'GMAIL'), ('APPLE', 'APPLE')], validators=[DataRequired()])
+    imap_server = StringField('IMAP Server', validators=[Optional()])
+    imap_port = StringField('IMAP Port', validators=[Optional()])
+    imap_use_ssl = StringField('Use SSL', validators=[Optional()])
     submit = SubmitField('Save')
 
     def validate_password(form, field):

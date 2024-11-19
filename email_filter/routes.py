@@ -348,18 +348,8 @@ def init_routes(app):
         return read_imap_emails(email_account, current_user.id)
 
 
-    def test_email_connection_logic(email_address, password, email_type):
+    def test_email_connection_logic(email_address, password, email_type, server, port):
         try:
-            # Automatically set server details based on email type
-            if email_type == 'GMAIL':
-                server = 'imap.gmail.com'
-                port = 993
-                use_ssl = True
-            elif email_type == 'APPLE':
-                server = 'imap.mail.me.com'
-                port = 993
-                use_ssl = True
-
             if email_type in ['GMAIL', 'APPLE']:
                 imap = IMAP4_SSL(server, port)
                 imap.login(email_address, password)
@@ -376,8 +366,15 @@ def init_routes(app):
         password = request.form.get('password')
         email_type = request.form.get('email_type')
 
+        if email_type == 'GMAIL':
+            server = 'imap.gmail.com'
+            port = 993
+        elif email_type == 'APPLE':
+            server = 'imap.mail.me.com'
+            port = 993       
+
         # Use the shared logic to test the connection
-        success, error = test_email_connection_logic(email_address, password, email_type, server, port, use_ssl)
+        success, error = test_email_connection_logic(email_address, password, email_type, server, port)
 
         if success:
             return jsonify(success=True)
@@ -399,9 +396,11 @@ def init_routes(app):
         email_address = account.email
         password = account.password
         email_type = account.provider
+        server = account.imap_server
+        port = account.imap_port
 
         # Use the shared logic to test the connection
-        success, error = test_email_connection_logic(email_address, password, email_type)
+        success, error = test_email_connection_logic(email_address, password, email_type, server, port)
 
         if success:
             return jsonify(success=True)
