@@ -218,7 +218,7 @@ def read_imap_emails(account, user_id):
         mailboxes_with_emails = get_folders(email_client, account, user_id, start_date, end_date)
 
         for mailbox_name in mailboxes_with_emails:
-            if mailbox_name.startswith('NOTES'):
+            if mailbox_name.startswith('Notes'):
                 continue
             try:
                 # Use SELECT with readonly=True to get the number of messages without fetching all IDs
