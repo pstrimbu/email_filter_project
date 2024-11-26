@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                     .catch(error => {
                         console.error('Error scanning emails:', error);
-                        alert('An error occurred while scanning emails. Please check the console for more details.');
+                        // alert('An error occurred while scanning emails. Please check the console for more details.');
                     })
                     .finally(() => {
                         scanEmailsButton.disabled = false;
