@@ -48,7 +48,7 @@ class Email(db.Model):
     text_content = db.Column(LONGTEXT, nullable=True)
 
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'account_id', 'email_id', name='uq_user_account_email'),
+        db.UniqueConstraint('user_id', 'account_id', 'email_id', 'folder', name='uq_user_account_email_folder'),
         db.Index('ix_email_text_content', 'text_content', mysql_prefix='FULLTEXT'),
         db.Index('ix_email_receivers', 'receivers', mysql_length=255),
     )

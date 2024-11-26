@@ -132,6 +132,11 @@ def get_folders(email_client, account, user_id, start_date, end_date):
 
                 # Skip folders that start with "[Gmail]"
                 if mailbox_name.startswith("[Gmail]"):
+                    print(f"Skipping Gmail folder: {mailbox_name}")
+                    continue
+
+                if mailbox_name.lower().startswith("notes"):
+                    print(f"Skipping Notes folder: {mailbox_name}")
                     continue
                 
                 # Use SELECT with readonly=True to get the number of messages without fetching all IDs
@@ -204,12 +209,19 @@ def read_imap_emails(account, user_id):
 
         # Remove all previous info for this email account
         EmailFolder.query.filter_by(user_id=user_id, account_id=account.id).delete()
+        print(f"deleting email folders for user {user_id} and account {account.id}")
         Email.query.filter_by(user_id=user_id, account_id=account.id).delete()
-        EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).delete()
+        print(f"deleting emails for user {user_id} and account {account.id}")
+        # don't delete email addresses, they are used for filtering
+        # EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).delete()
+        
+        # Commit the deletions to ensure they are applied
         db.session.commit()
 
         # Initialize an empty set for existing email addresses since they were just deleted
-        existing_email_addresses = set()
+        existing_email_addresses = set(
+            email_address.email for email_address in EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).all()
+        )
 
         # Initialize a set to keep track of unique email addresses
         unique_email_addresses = set()
@@ -218,8 +230,6 @@ def read_imap_emails(account, user_id):
         mailboxes_with_emails = get_folders(email_client, account, user_id, start_date, end_date)
 
         for mailbox_name in mailboxes_with_emails:
-            if mailbox_name.lower().startswith('notes'):
-                continue
             try:
                 # Use SELECT with readonly=True to get the number of messages without fetching all IDs
                 status, data = email_client.select(mailbox_name, readonly=True)
@@ -231,13 +241,13 @@ def read_imap_emails(account, user_id):
                     if status == "OK":
                         # Convert email_ids_data from bytes to a list of strings
                         email_ids = email_ids_data[0].decode().split() if email_ids_data[0] else []
-                        
-                        # Sort and filter for unique email IDs
-                        email_ids = sorted(set(email_ids))
 
                         # Fetch emails in batches
                         batch_size = 20  # Define the number of emails to fetch at once
+                        
+
                         for i in range(0, len(email_ids), batch_size):
+                            print(f"email batch: {i} of {len(email_ids)}")
                             try:
                                 # Check if scan_status is "stopping"
                                 if scan_status.get((user_id, account.id)) == 'stopping':
@@ -246,8 +256,20 @@ def read_imap_emails(account, user_id):
                                 batch_ids = email_ids[i:i + batch_size]
                                 batch_ids_str = ','.join(batch_ids)
 
-                                # Fetch the entire raw email content
-                                status, msg_data = email_client.fetch(batch_ids_str, "(BODY.PEEK[])")
+                                # Retry logic for fetching emails
+                                retries = 3
+                                while retries > 0:
+                                    try:
+                                        # Fetch the entire raw email content
+                                        status, msg_data = email_client.fetch(batch_ids_str, "(BODY.PEEK[])")
+                                        if status == 'OK':
+                                            break
+                                    except Exception as e:
+                                        print(f"Error fetching emails: {e}")
+                                        retries -= 1
+                                        if retries == 0:
+                                            raise Exception("Failed to fetch emails after multiple attempts")
+
                                 for response_part in msg_data:
                                     try:
                                         if isinstance(response_part, tuple):
@@ -277,7 +299,11 @@ def read_imap_emails(account, user_id):
                                                 unique_email_addresses.add(sender_email)
                                             unique_email_addresses.update(all_recipients_emails)
 
-                                            email_date = parsedate_to_datetime(metadata["Date"]).strftime('%Y-%m-%d %H:%M:%S')
+                                            # Check if the Date header is present and valid
+                                            try:
+                                                email_date = parsedate_to_datetime(metadata["Date"]).strftime('%Y-%m-%d %H:%M:%S')
+                                            except Exception as e:
+                                                email_date = '1970-01-01 00:00:00'
 
                                             body = email_message.get_body(preferencelist=('plain'))
                                             if body is not None:
@@ -297,31 +323,20 @@ def read_imap_emails(account, user_id):
 
                                             receivers_str = ','.join(all_recipients_emails)
 
-                                            # Check if the email already exists
-                                            existing_email = Email.query.filter_by(
+                                            # Create a new email record
+                                            email = Email(
                                                 user_id=user_id,
                                                 account_id=account.id,
-                                                email_id=email_id
-                                            ).first()
+                                                email_id=email_id,
+                                                email_date=email_date,
+                                                sender=sender_email,
+                                                receivers=receivers_str,
+                                                folder=mailbox_name,
+                                                raw_data=raw_email_data,
+                                                text_content=text_content
+                                            )
+                                            db.session.add(email)
 
-                                            if existing_email:
-                                                # Update existing email if necessary
-                                                existing_email.raw_data = raw_email_data
-                                                # Update other fields as needed
-                                            else:
-                                                # Create a new email record
-                                                email = Email(
-                                                    user_id=user_id,
-                                                    account_id=account.id,
-                                                    email_id=email_id,
-                                                    email_date=email_date,
-                                                    sender=sender_email,
-                                                    receivers=receivers_str,
-                                                    folder=mailbox_name,
-                                                    raw_data=raw_email_data,
-                                                    text_content=text_content
-                                                )
-                                                db.session.add(email)
                                     except Exception as e:
                                         print(f"Error processing email {email_id}: {e}")
                                         continue
@@ -337,11 +352,11 @@ def read_imap_emails(account, user_id):
                                 db.session.commit()
                             except Exception as e:
                                 print(f"Error processing emails in batch {i}: {e}")
-                                continue
+                                # continue
 
             except Exception as e:
                 print(f"Error processing emails in mailbox {mailbox_name}: {e}")
-                continue
+                # continue
 
         return {'success': True}
 
