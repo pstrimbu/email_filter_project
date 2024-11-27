@@ -223,6 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('loadingSpinner').style.display = 'flex';
                     const filterId = e.target.closest('.email-count-link').getAttribute('data-filter-id');
                     modalEmailList = []
+                    loadEmailBatch(0);
                     fetch(`/get_email_ids_for_filter/${filterId}`)
                         .then(response => response.json())
                         .then(data => {
@@ -895,6 +896,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('loadingSpinner').style.display = 'flex';
                     const emailId = this.getAttribute('data-email-id');
                     modalEmailList = []
+                    loadEmailBatch(0);
                     fetch(`/get_email_ids_for_address/${emailId}`)
                         .then(response => response.json())
                         .then(data => {
