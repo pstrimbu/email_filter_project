@@ -787,21 +787,35 @@ document.addEventListener('DOMContentLoaded', function() {
                             emailList.innerHTML = ''; // Clear existing list
                             data.emails.forEach((email, index) => {
                                 const emailItem = document.createElement('li');
-                                emailItem.textContent = email.email_date; // Assuming each email has a subject
-                                emailItem.addEventListener('click', () => displayEmailDetails(email));
+                                emailItem.textContent = email.email_date; // Assuming each email has a date
+                                emailItem.addEventListener('click', () => {
+                                    displayEmailDetails(email);
+                                    highlightSelectedEmail(emailItem);
+                                });
                                 emailList.appendChild(emailItem);
 
                                 // Select the first email by default
                                 if (index === 0) {
                                     displayEmailDetails(email);
+                                    highlightSelectedEmail(emailItem);
                                 }
-                                updatePaginationButtons();
                             });
+
+                            updatePaginationButtons();
                         } else {
                             displayFlashMessage('Failed to load email data: ' + data.message, 'danger');
                         }
                     })
                     .catch(error => console.error('Error loading email data:', error));
+            }
+
+            function highlightSelectedEmail(selectedItem) {
+                // Remove highlight from all items
+                emailList.querySelectorAll('li').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                // Add highlight to the selected item
+                selectedItem.classList.add('selected');
             }
 
             function updatePaginationButtons() {

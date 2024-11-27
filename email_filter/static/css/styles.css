@@ -829,6 +829,17 @@ thead th:nth-child(3) {
     margin: 0;
 }
 
+.email-list ul li.selected {
+    background-color: #e9ecef;
+    /* Light gray background for selected item */
+    color: #007bff;
+    /* Change text color for better visibility */
+    font-weight: bold;
+    /* Optional: Make the text bold */
+    border-left: 3px solid #007bff;
+    /* Optional: Add a border to the left */
+}
+
 .email-details {
     width: 80%;
     padding-left: 20px;
