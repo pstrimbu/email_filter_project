@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.preventDefault();
                     document.getElementById('loadingSpinner').style.display = 'flex';
                     const filterId = e.target.closest('.email-count-link').getAttribute('data-filter-id');
-
+                    modalEmailList = []
                     fetch(`/get_email_ids_for_filter/${filterId}`)
                         .then(response => response.json())
                         .then(data => {
@@ -894,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.preventDefault();
                     document.getElementById('loadingSpinner').style.display = 'flex';
                     const emailId = this.getAttribute('data-email-id');
-
+                    modalEmailList = []
                     fetch(`/get_email_ids_for_address/${emailId}`)
                         .then(response => response.json())
                         .then(data => {
