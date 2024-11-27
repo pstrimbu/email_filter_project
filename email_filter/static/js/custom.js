@@ -771,6 +771,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const end = start + batchSize;
                 const emailBatch = modalEmailList.slice(start, end);
 
+                // Show the loading spinner
+                document.getElementById('loadingSpinner').style.display = 'flex';
+
                 // Fetch email data for the batch
                 fetch(`/get_email_data`, {
                         method: 'POST',
@@ -783,8 +786,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            // Populate the left panel with email data
                             emailList.innerHTML = ''; // Clear existing list
+
                             data.emails.forEach((email, index) => {
                                 const emailItem = document.createElement('li');
                                 emailItem.textContent = email.email_date; // Assuming each email has a date
@@ -806,7 +809,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             displayFlashMessage('Failed to load email data: ' + data.message, 'danger');
                         }
                     })
-                    .catch(error => console.error('Error loading email data:', error));
+                    .catch(error => console.error('Error loading email data:', error))
+                    .finally(() => {
+                        // Hide the loading spinner
+                        document.getElementById('loadingSpinner').style.display = 'none';
+                    });
             }
 
             function highlightSelectedEmail(selectedItem) {
