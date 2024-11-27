@@ -742,3 +742,93 @@ def init_routes(app):
         account_id = int(account_id)
         stop(current_user.id, account_id)
         return jsonify({'success': True})
+
+
+    @app.route('/get_email_ids_for_address/<int:email_address_id>', methods=['GET'])
+    @login_required
+    def get_emails_for_address(email_address_id):
+        try:
+            batch_number = int(request.args.get('batch', 1)) - 1  # Default to batch 1 if not provided
+            batch_size = 20
+            start = max(batch_number * batch_size, 0)  # Ensure start is never negative
+            end = start + batch_size
+
+            # Fetch the email address using the provided ID
+            email_address = EmailAddress.query.get_or_404(email_address_id)
+            email_str = email_address.email
+
+            # Query emails where the email address is in the sender or receivers
+            emails = Email.query.filter(
+                or_(
+                    Email.sender == email_str,
+                    Email.receivers.like(f"%{email_str}%")
+                )
+            ).slice(start, end).all()
+
+            email_data = [{
+                'id': email.id
+            } for email in emails]
+
+            total_emails = Email.query.filter(
+                or_(
+                    Email.sender == email_str,
+                    Email.receivers.like(f"%{email_str}%")
+                )
+            ).count()
+
+            return jsonify(success=True, email_ids=email_data, total=total_emails)
+        except Exception as e:
+            return jsonify(success=False, message=str(e))
+
+    @app.route('/get_email_data', methods=['POST'])
+    @login_required
+    def get_email_data():
+        try:
+            # Get the list of email IDs from the request
+            email_ids_data = request.json.get('email_ids', [])
+            
+            if not email_ids_data:
+                return jsonify(success=False, message='No email IDs provided'), 400
+
+            # Extract the actual IDs from the list of dictionaries
+            email_ids = [email['id'] for email in email_ids_data]
+
+            # Query the database for the emails with the given IDs
+            emails = Email.query.filter(Email.id.in_(email_ids)).all()
+
+            # Prepare the data to be returned
+            email_data = [{
+                'id': email.id,
+                'email_date': email.email_date.strftime('%Y-%m-%d %H:%M:%S') if email.email_date else '',
+                'sender': email.sender,
+                'receivers': email.receivers,
+                'folder': email.folder,
+                'text_content': email.text_content
+            } for email in emails]
+
+            return jsonify(success=True, emails=email_data)
+        except Exception as e:
+            return jsonify(success=False, message=str(e)), 500
+
+    @app.route('/get_email_ids_for_filter/<int:filter_id>', methods=['GET'])
+    @login_required
+    def get_emails_for_filter(filter_id):
+        try:
+            # Fetch the filter using the provided ID
+            filter_obj = Filter.query.get_or_404(filter_id)
+
+            # Ensure the filter belongs to the current user
+            if filter_obj.user_id != current_user.id:
+                return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
+
+            # Query emails that match the filter text
+            emails = Email.query.filter(
+                Email.account_id == filter_obj.account_id,
+                Email.text_content.contains(filter_obj.filter)
+            ).all()
+
+            email_data = [{'id': email.id} for email in emails]
+
+            return jsonify(success=True, email_ids=email_data)
+        except Exception as e:
+            return jsonify(success=False, message=str(e))

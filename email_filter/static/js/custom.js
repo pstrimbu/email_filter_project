@@ -218,6 +218,25 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         })
                         .catch(error => console.error('Error updating filter action:', error));
+                } else if (e.target.closest('.email-count-link')) {
+                    e.preventDefault();
+                    const filterId = e.target.closest('.email-count-link').getAttribute('data-filter-id');
+
+                    fetch(`/get_email_ids_for_filter/${filterId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                modalEmailList = data.email_ids;
+                                loadEmailBatch(0);
+                            } else {
+                                displayFlashMessage('Failed to load emails: ' + data.message, 'danger');
+                            }
+                        })
+                        .catch(error => console.error('Error loading emails:', error));
+
+                    // Open the modal
+                    const emailViewerModal = document.getElementById('emailViewerModal');
+                    emailViewerModal.style.display = 'block';
                 }
             });
         }
@@ -734,6 +753,137 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     })
                     .catch(error => console.error('Error deleting file:', error));
+            });
+        }
+
+        let modalEmailList = [];
+        const emailList = document.getElementById('emailList');
+        const prevBatchButton = document.getElementById('prevBatch');
+        const nextBatchButton = document.getElementById('nextBatch');
+
+        if (emailList) {
+            let currentBatch = 0;
+            const batchSize = 10;
+
+            function loadEmailBatch(batchNumber) {
+                currentBatch = batchNumber;
+                const start = batchNumber * batchSize;
+                const end = start + batchSize;
+                const emailBatch = modalEmailList.slice(start, end);
+
+                // Fetch email data for the batch
+                fetch(`/get_email_data`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+                        },
+                        body: JSON.stringify({ email_ids: emailBatch })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Populate the left panel with email data
+                            emailList.innerHTML = ''; // Clear existing list
+                            data.emails.forEach((email, index) => {
+                                const emailItem = document.createElement('li');
+                                emailItem.textContent = email.email_date; // Assuming each email has a subject
+                                emailItem.addEventListener('click', () => displayEmailDetails(email));
+                                emailList.appendChild(emailItem);
+
+                                // Select the first email by default
+                                if (index === 0) {
+                                    displayEmailDetails(email);
+                                }
+                                updatePaginationButtons();
+                            });
+                        } else {
+                            displayFlashMessage('Failed to load email data: ' + data.message, 'danger');
+                        }
+                    })
+                    .catch(error => console.error('Error loading email data:', error));
+            }
+
+            function updatePaginationButtons() {
+                const prevBatchButton = document.getElementById('prevBatch');
+                const nextBatchButton = document.getElementById('nextBatch');
+
+                // Disable "Previous" button if on the first batch
+                prevBatchButton.disabled = currentBatch === 0;
+
+                // Disable "Next" button if on the last batch
+                nextBatchButton.disabled = (currentBatch + 1) * batchSize >= modalEmailList.length;
+            }
+
+            function displayEmailDetails(email) {
+                const emailDateElement = document.getElementById('emailDate');
+                const senderElement = document.getElementById('sender');
+                const receiversElement = document.getElementById('receivers');
+                const folderElement = document.getElementById('folder');
+                const contentElement = document.getElementById('content');
+
+                // Debugging: Log if any element is null
+                if (!emailDateElement || !senderElement || !receiversElement || !folderElement || !contentElement) {
+                    console.error('One or more elements are not found in the DOM');
+                    return;
+                }
+
+                emailDateElement.textContent = email.email_date;
+                senderElement.textContent = email.sender;
+                receiversElement.textContent = email.receivers;
+                folderElement.textContent = email.folder;
+                contentElement.textContent = email.text_content;
+            }
+
+            prevBatchButton.addEventListener('click', function() {
+                if (currentBatch > 0) {
+                    currentBatch--;
+                    loadEmailBatch(currentBatch);
+                }
+            });
+
+            nextBatchButton.addEventListener('click', function() {
+                currentBatch++;
+                loadEmailBatch(currentBatch);
+            });
+
+            // Close modal logic
+            document.querySelector('.close').addEventListener('click', function() {
+                document.getElementById('emailViewerModal').style.display = 'none';
+            });
+
+            // Load the first batch of emails when the modal is opened
+            if (modalEmailList.length > 0) {
+                loadEmailBatch(currentBatch);
+            }
+        }
+
+
+        let emailAddressesTable = document.getElementById('emailAddressesTable')
+        if (emailAddressesTable) {
+
+            // Event listener for email count links
+            document.querySelectorAll('.email-count-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const emailId = this.getAttribute('data-email-id');
+
+                    fetch(`/get_email_ids_for_address/${emailId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                modalEmailList = data.email_ids;
+                                loadEmailBatch(0);
+                            } else {
+                                displayFlashMessage('Failed to load emails: ' + data.message, 'danger');
+                            }
+                        })
+                        .catch(error => console.error('Error loading emails:', error));
+
+                    // Open the modal
+                    const emailViewerModal = document.getElementById('emailViewerModal');
+                    emailViewerModal.style.display = 'block';
+                });
             });
         }
     }

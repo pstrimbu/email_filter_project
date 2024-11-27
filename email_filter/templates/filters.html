@@ -33,12 +33,16 @@
                             <button type="button" class="filter-action-button btn btn-sm {{ 'btn-success' if filter.action == 'include' else 'btn-secondary' }} filter-action-toggle" data-action="include" data-filter-id="{{ filter.id }}">
                                 Include
                             </button>
-                            <button type="button" class="filter-action-buttonbtn btn-sm {{ 'btn-danger' if filter.action == 'exclude' else 'btn-secondary' }} filter-action-toggle" data-action="exclude" data-filter-id="{{ filter.id }}">
+                            <button type="button" class="filter-action-button btn btn-sm {{ 'btn-danger' if filter.action == 'exclude' else 'btn-secondary' }} filter-action-toggle" data-action="exclude" data-filter-id="{{ filter.id }}">
                                 Exclude
                             </button>
                         </div>
                     </td>
-                    <td>{{ filter.email_count }}</td>
+                    <td>
+                        <a href="#" class="email-count-link" data-filter-id="{{ filter.id }}">
+                            {{ filter.email_count }}
+                        </a>
+                    </td>
                     <td>{{ filter.filter }}</td>
                     <td></td>
                 </tr>

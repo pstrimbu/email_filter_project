@@ -13,15 +13,19 @@
                 </tr>
             </thead>
             <tbody>
-                {% for email in email_addresses %}
+                {% for email_address in email_addresses %}
                 <tr>
-                    <td>{{ email.email }}</td>
-                    <td>{{ email.email_count }}</td>
+                    <td>{{ email_address.email }}</td>
+                    <td>
+                        <a href="#" class="email-count-link" data-email-id="{{ email_address.id }}">
+                            {{ email_address.email_count }}
+                        </a>
+                    </td>
                     <td>
                         <div class="btn-group" role="group">
-                            <button type="button" class="btn {% if email.state == 'exclude' %}btn-danger{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="exclude">Exclude</button>
-                            <button type="button" class="btn {% if email.state == 'ignore' %}btn-warning{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="ignore">Ignore</button>
-                            <button type="button" class="btn {% if email.state == 'include' %}btn-success{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email.id }}" data-action="include">Include</button>
+                            <button type="button" class="btn {% if email_address.state == 'exclude' %}btn-danger{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="exclude">Exclude</button>
+                            <button type="button" class="btn {% if email_address.state == 'ignore' %}btn-warning{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="ignore">Ignore</button>
+                            <button type="button" class="btn {% if email_address.state == 'include' %}btn-success{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="include">Include</button>
                         </div>
                     </td>
                 </tr>

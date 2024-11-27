@@ -806,3 +806,74 @@ thead th:nth-child(3) {
     margin-bottom: 0;
     /* Ensure no vertical alignment issues */
 }
+
+.modal-content {
+    width: 80%;
+    height: 80%;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    background-color: #fefefe;
+}
+
+.email-list {
+    width: 20%;
+    height: 100%;
+    overflow-y: auto;
+    border-right: 1px solid #ddd;
+}
+
+.email-list ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.email-details {
+    width: 80%;
+    padding-left: 20px;
+    overflow-y: auto;
+}
+
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+}
+
+.scrollable-content {
+    max-height: 300px;
+    /* Set a fixed height for the scrollable area */
+    overflow-y: auto;
+    /* Enable vertical scrolling */
+    border: 1px solid #ddd;
+    /* Optional: Add a border for better visibility */
+    padding: 10px;
+    /* Optional: Add padding for better readability */
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #f1f1f1;
+    border-bottom: 1px solid #ddd;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #333;
+}
+
+.modal-header .close {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #333;
+    transition: color 0.3s ease;
+}
+
+.modal-header .close:hover {
+    color: #007bff;
+}

@@ -1,0 +1,31 @@
+<div id="emailViewerModal" class="modal">
+    <div class="modal-content" style="width: 80%; height: 80%;">
+        <div class="modal-header">
+            <h2>Email Viewer</h2>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body" style="display: flex;">
+            <div class="email-list" style="width: 20%; overflow-y: auto;">
+                <ul id="emailList" style="list-style-type: none; padding: 0;">
+                    <!-- Email list items will be dynamically inserted here -->
+                </ul>
+                <div class="pagination">
+                    <button id="prevBatch" class="btn">Previous</button>
+                    <span id="emailCount"></span>
+                    <button id="nextBatch" class="btn">Next</button>
+                </div>
+            </div>
+            <div class="email-details" style="width: 80%; overflow-y: auto;">
+                <div class="email-metadata">
+                    <p><strong>Date:</strong> <span id="emailDate"></span></p>
+                    <p><strong>Sender:</strong> <span id="sender"></span></p>
+                    <p><strong>Receivers:</strong> <span id="receivers"></span></p>
+                    <p><strong>Folder:</strong> <span id="folder"></span></p>
+                    <div class="scrollable-content">
+                        <p><strong>Content:</strong> <span id="content"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
