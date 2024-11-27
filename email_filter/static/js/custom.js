@@ -220,6 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         .catch(error => console.error('Error updating filter action:', error));
                 } else if (e.target.closest('.email-count-link')) {
                     e.preventDefault();
+                    document.getElementById('loadingSpinner').style.display = 'flex';
                     const filterId = e.target.closest('.email-count-link').getAttribute('data-filter-id');
 
                     fetch(`/get_email_ids_for_filter/${filterId}`)
@@ -232,7 +233,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 displayFlashMessage('Failed to load emails: ' + data.message, 'danger');
                             }
                         })
-                        .catch(error => console.error('Error loading emails:', error));
+                        .catch(error => console.error('Error loading emails:', error))
+                        .finally(() => {
+                            // Hide the loading spinner
+                            document.getElementById('loadingSpinner').style.display = 'none';
+                        });
 
                     // Open the modal
                     const emailViewerModal = document.getElementById('emailViewerModal');
@@ -887,6 +892,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.email-count-link').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
+                    document.getElementById('loadingSpinner').style.display = 'flex';
                     const emailId = this.getAttribute('data-email-id');
 
                     fetch(`/get_email_ids_for_address/${emailId}`)
@@ -899,7 +905,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 displayFlashMessage('Failed to load emails: ' + data.message, 'danger');
                             }
                         })
-                        .catch(error => console.error('Error loading emails:', error));
+                        .catch(error => console.error('Error loading emails:', error))
+                        .finally(() => {
+                            // Hide the loading spinner
+                            document.getElementById('loadingSpinner').style.display = 'none';
+                        });
 
                     // Open the modal
                     const emailViewerModal = document.getElementById('emailViewerModal');
