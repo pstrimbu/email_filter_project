@@ -440,45 +440,84 @@ def init_routes(app):
         scan_status[(current_user.id, account_id)] = 'stopping' # this triggers the email_processor.py to exit the while true loop
         return jsonify({'success': True})
 
+
     @app.route('/email_addresses')
     @login_required
     def email_addresses_view():
         account_id = request.args.get('account_id') or request.form.get('account_id')
         if account_id:
-            account_id = int(account_id)
-        
+            try:
+                account_id = int(account_id)
+            except ValueError:
+                flash('Invalid Account ID', 'danger')
+                return redirect(url_for('some_default_view'))  # Redirect if invalid account_id
+
         if not account_id:
             flash('Account ID is required', 'danger')
             return redirect(url_for('some_default_view'))  # Redirect to a default view if account_id is missing
 
         email_addresses_list = []
 
-        # Query to get email addresses and their counts
         try:
-            email_addresses_list = db.session.query(
-                EmailAddress.id,
-                EmailAddress.email,
-                EmailAddress.state,
+            # Query 1: Match emails by sender
+            sender_query = db.session.query(
+                EmailAddress.id.label('id'),
+                EmailAddress.email.label('email'),
+                EmailAddress.state.label('state'),
                 func.count(func.distinct(Email.id)).label('email_count')
             ).select_from(EmailAddress).join(
                 EmailAccount, EmailAddress.email_account_id == EmailAccount.id
             ).outerjoin(
-                Email, or_(
-                    Email.sender == EmailAddress.email,
-                    db.text("MATCH (email.receivers) AGAINST (:email IN BOOLEAN MODE)")
-                )
+                Email, Email.sender == EmailAddress.email
             ).filter(
                 EmailAccount.user_id == current_user.id,
                 EmailAccount.id == account_id
             ).group_by(
                 EmailAddress.id, EmailAddress.email, EmailAddress.state
-            ).order_by(
-                func.count(func.distinct(Email.id)).desc()
-            ).params(email=EmailAddress.email).all()
+            ).all()
+
+            # Query 2: Match emails by receivers using full-text search
+            receiver_query = db.session.query(
+                EmailAddress.id.label('id'),
+                EmailAddress.email.label('email'),
+                EmailAddress.state.label('state'),
+                func.count(func.distinct(Email.id)).label('email_count')
+            ).select_from(EmailAddress).join(
+                EmailAccount, EmailAddress.email_account_id == EmailAccount.id
+            ).outerjoin(
+                Email, db.text("MATCH (email.receivers) AGAINST (:search_email IN BOOLEAN MODE)")
+            ).filter(
+                EmailAccount.user_id == current_user.id,
+                EmailAccount.id == account_id
+            ).params(search_email=EmailAddress.email).group_by(
+                EmailAddress.id, EmailAddress.email, EmailAddress.state
+            ).all()
+
+            # Combine results in Python
+            email_counts = {}
+            for result in sender_query + receiver_query:
+                if result.id not in email_counts:
+                    email_counts[result.id] = {
+                        'id': result.id,
+                        'email': result.email,
+                        'state': result.state,
+                        'email_count': result.email_count
+                    }
+                else:
+                    email_counts[result.id]['email_count'] += result.email_count
+
+            # Convert combined results to list
+            email_addresses_list = list(email_counts.values())
+
+            # Sort by email_count in descending order
+            email_addresses_list.sort(key=lambda x: x['email_count'], reverse=True)
+
         except Exception as e:
             flash(f'Error fetching email addresses: {str(e)}', 'danger')
 
         return render_template('email_addresses.html', email_addresses=email_addresses_list, account_id=account_id)
+
+    
 
     @app.route("/filters", methods=['GET', 'POST'])
     @login_required
