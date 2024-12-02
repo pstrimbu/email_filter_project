@@ -465,7 +465,7 @@ def init_routes(app):
             ).outerjoin(
                 Email, or_(
                     Email.sender == EmailAddress.email,
-                    db.text("MATCH (Email.receivers) AGAINST (:email IN BOOLEAN MODE)")
+                    db.text("MATCH (email.receivers) AGAINST (:email IN BOOLEAN MODE)")
                 )
             ).filter(
                 EmailAccount.user_id == current_user.id,
