@@ -826,29 +826,35 @@ def init_routes(app):
         try:
             # Get the list of email IDs from the request
             email_ids_data = request.json.get('email_ids', [])
-            
             if not email_ids_data:
                 return jsonify(success=False, message='No email IDs provided'), 400
 
-            # Extract the actual IDs from the list of dictionaries
+            # Extract the actual IDs
             email_ids = [email['id'] for email in email_ids_data]
+            
+            # Define batch size
+            batch_size = 1000
+            email_data = []
 
-            # Query the database for the emails with the given IDs
-            emails = Email.query.filter(Email.id.in_(email_ids)).all()
+            # Process in batches
+            for i in range(0, len(email_ids), batch_size):
+                batch = email_ids[i:i + batch_size]
+                emails = Email.query.filter(Email.id.in_(batch)).all()
 
-            # Prepare the data to be returned
-            email_data = [{
-                'id': email.id,
-                'email_date': email.email_date.strftime('%Y-%m-%d %H:%M:%S') if email.email_date else '',
-                'sender': email.sender,
-                'receivers': email.receivers,
-                'folder': email.folder,
-                'text_content': email.text_content
-            } for email in emails]
+                # Append results
+                email_data.extend([{
+                    'id': email.id,
+                    'email_date': email.email_date.strftime('%Y-%m-%d %H:%M:%S') if email.email_date else '',
+                    'sender': email.sender,
+                    'receivers': email.receivers,
+                    'folder': email.folder,
+                    'text_content': email.text_content
+                } for email in emails])
 
             return jsonify(success=True, emails=email_data)
         except Exception as e:
             return jsonify(success=False, message=str(e)), 500
+
 
     @app.route('/get_email_ids_for_filter/<int:filter_id>', methods=['GET'])
     @login_required
