@@ -451,6 +451,8 @@ def init_routes(app):
             flash('Account ID is required', 'danger')
             return redirect(url_for('some_default_view'))  # Redirect to a default view if account_id is missing
 
+        email_addresses_list = []
+
         # Query to get email addresses and their counts
         try:
             email_addresses_list = db.session.query(
