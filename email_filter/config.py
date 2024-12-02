@@ -19,3 +19,10 @@ class Config:
     GOOGLE_DISCOVERY_URL = (
         "https://accounts.google.com/.well-known/openid-configuration"
     )
+    
+    # Increase pool size and overflow
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 20,  # Increase the pool size
+        'max_overflow': 30,  # Increase the overflow limit
+        'pool_timeout': 40,  # Increase the timeout for getting a connection from the pool
+    }
