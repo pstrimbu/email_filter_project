@@ -127,8 +127,18 @@ def get_folders(email_client, account, user_id, start_date, end_date):
 
         for mailbox in mailboxes:
             try:
-                # Extract mailbox name
-                mailbox_name = mailbox.decode().split(' "/" ')[-1].strip('"')
+                # Extract and clean mailbox name
+                # mailbox_name = mailbox.decode().split(' "/" ')[-1].strip('"').replace("'", "\\'").replace(" ", "\\ ")
+                mailbox_decoded = mailbox.decode()
+                mailbox_split = mailbox_decoded.split(' "/" ')[-1]
+                mailbox_stripped = mailbox_split.strip('"')
+                mailbox_escaped = mailbox_stripped.replace('"', '\"')
+                mailbox_name = f'"{mailbox_escaped}"'
+
+                print(f"Attempting to examine mailbox: {mailbox_name}")
+
+                # Quote the mailbox name to handle special characters and spaces
+                # quoted_mailbox_name = f'"{mailbox_name}"'
 
                 # Skip folders that start with "[Gmail]"
                 if mailbox_name.startswith("[Gmail]"):
@@ -142,7 +152,7 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                 # Use SELECT with readonly=True to get the number of messages without fetching all IDs
                 status, data = email_client.select(mailbox_name, readonly=True)
                 if status != 'OK':
-                    print(f"Failed to examine mailbox {mailbox_name}")
+                    print(f"Failed to examine mailbox {mailbox_name}: {data}")
                     continue
 
                 # If start_date and end_date are set, filter emails by date range
@@ -177,7 +187,7 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                     # Add mailbox to the list of mailboxes with emails
                     mailboxes_with_emails.append(mailbox_name)
             except Exception as e:
-                # print(f"Failed to read mailbox: {mailbox}, error: {e}")
+                print(f"Failed to read mailbox: {mailbox}, error: {e}")
                 continue
 
         return mailboxes_with_emails
