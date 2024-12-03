@@ -22,7 +22,7 @@ class Config:
     
     # Increase pool size and overflow
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 20,  # Increase the pool size
-        'max_overflow': 30,  # Increase the overflow limit
-        'pool_timeout': 40,  # Increase the timeout for getting a connection from the pool
+        'pool_size': 50,  # Further increase the pool size
+        'max_overflow': 100,  # Further increase the overflow limit
+        'pool_timeout': 60,  # Increase the timeout for getting a connection from the pool
     }

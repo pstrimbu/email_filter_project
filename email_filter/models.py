@@ -58,7 +58,7 @@ class Email(db.Model):
 
 class EmailAddress(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False, index=True)
     state = db.Column(Enum('include', 'ignore', 'exclude', name='email_state'), nullable=False, default='ignore')
     email_account_id = db.Column(db.Integer, db.ForeignKey('email_account.id', ondelete='CASCADE', name='fk_email_address_email_account'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE', name='fk_email_address_user'), nullable=False)

@@ -128,7 +128,6 @@ def get_folders(email_client, account, user_id, start_date, end_date):
         for mailbox in mailboxes:
             try:
                 # Extract and clean mailbox name
-                # mailbox_name = mailbox.decode().split(' "/" ')[-1].strip('"').replace("'", "\\'").replace(" ", "\\ ")
                 mailbox_decoded = mailbox.decode()
                 mailbox_split = mailbox_decoded.split(' "/" ')[-1]
                 mailbox_stripped = mailbox_split.strip('"')
@@ -136,9 +135,6 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                 mailbox_name = f'"{mailbox_escaped}"'
 
                 print(f"Attempting to examine mailbox: {mailbox_name}")
-
-                # Quote the mailbox name to handle special characters and spaces
-                # quoted_mailbox_name = f'"{mailbox_name}"'
 
                 # Skip folders that start with "[Gmail]"
                 if mailbox_name.startswith("[Gmail]"):
@@ -172,8 +168,13 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                     # Extract the number of messages from the response
                     email_count = int(data[0].decode())
 
-
                 if email_count > 0:
+                    # Check if the folder already exists
+                    existing_folder = EmailFolder.query.filter_by(user_id=user_id, account_id=account.id, folder=mailbox_name).first()
+                    if existing_folder:
+                        print(f"Folder already exists: {mailbox_name}")
+                        continue
+
                     # Store the folder with the count of emails
                     new_folder = EmailFolder(
                         user_id=user_id,
@@ -217,18 +218,12 @@ def read_imap_emails(account, user_id):
         start_date = account.start_date
         end_date = account.end_date + timedelta(days=1) if account.end_date else None
 
-        # Remove all previous info for this email account
-        EmailFolder.query.filter_by(user_id=user_id, account_id=account.id).delete()
-        print(f"deleting email folders for user {user_id} and account {account.id}")
-        Email.query.filter_by(user_id=user_id, account_id=account.id).delete()
-        print(f"deleting emails for user {user_id} and account {account.id}")
-        # don't delete email addresses, they are used for filtering
-        # EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).delete()
-        
-        # Commit the deletions to ensure they are applied
-        db.session.commit()
+        # Retrieve existing folders and their email counts from the Email table
+        existing_folders = {folder.folder: folder.email_count for folder in EmailFolder.query.filter_by(user_id=user_id, account_id=account.id).all()}
+        email_counts = db.session.query(Email.folder, db.func.count(Email.id)).filter_by(user_id=user_id, account_id=account.id).group_by(Email.folder).all()
+        email_counts_dict = dict(email_counts)
 
-        # Initialize an empty set for existing email addresses since they were just deleted
+        # Initialize an empty set for existing email addresses
         existing_email_addresses = set(
             email_address.email for email_address in EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).all()
         )
@@ -241,6 +236,11 @@ def read_imap_emails(account, user_id):
 
         for mailbox_name in mailboxes_with_emails:
             try:
+                # Check if the folder has already been processed
+                if mailbox_name in email_counts_dict and email_counts_dict[mailbox_name] > 0:
+                    print(f"Skipping folder with existing emails: {mailbox_name}")
+                    continue
+
                 # Use SELECT with readonly=True to get the number of messages without fetching all IDs
                 status, data = email_client.select(mailbox_name, readonly=True)
                 if status == 'OK':
