@@ -134,8 +134,6 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                 mailbox_escaped = mailbox_stripped.replace('"', '\"')
                 mailbox_name = f'"{mailbox_escaped}"'
 
-                print(f"Attempting to examine mailbox: {mailbox_name}")
-
                 # Skip folders that start with "[Gmail]"
                 if mailbox_name.startswith("[Gmail]"):
                     print(f"Skipping Gmail folder: {mailbox_name}")
@@ -172,8 +170,13 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                     # Check if the folder already exists
                     existing_folder = EmailFolder.query.filter_by(user_id=user_id, account_id=account.id, folder=mailbox_name).first()
                     if existing_folder:
-                        print(f"Folder already exists: {mailbox_name}")
+                        print(f"Found existing folder: {mailbox_name}")
+                        mailboxes_with_emails.append(mailbox_name)
                         continue
+
+                    # Truncate the mailbox name to fit the database column size
+                    max_folder_length = 255  # Adjust this value based on your database schema
+                    mailbox_name = mailbox_name[:max_folder_length]
 
                     # Store the folder with the count of emails
                     new_folder = EmailFolder(
@@ -182,6 +185,8 @@ def get_folders(email_client, account, user_id, start_date, end_date):
                         folder=mailbox_name,
                         email_count=email_count
                     )
+                    print(f"Adding new folder: {mailbox_name}")
+
                     db.session.add(new_folder)
                     db.session.commit()  # Commit the folder size
 

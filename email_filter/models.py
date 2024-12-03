@@ -43,7 +43,7 @@ class Email(db.Model):
     sender = db.Column(db.String(120), nullable=False, index=True)
     receivers = db.Column(db.Text, nullable=False)
     action = db.Column(db.String(20), nullable=False, default='ignore')
-    folder = db.Column(db.String(100), nullable=False)
+    folder = db.Column(db.String(255), nullable=False)
     raw_data = db.Column(LONGBLOB, nullable=False)
     text_content = db.Column(LONGTEXT, nullable=True)
 
