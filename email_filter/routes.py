@@ -12,6 +12,10 @@ from email_filter.globals import scan_status, processing_status
 from .export_processor import process_emails, stop
 from sqlalchemy import or_, func
 from email_filter.aws import SpotInstanceManager, delete_file_from_s3
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def init_routes(app):
@@ -20,6 +24,7 @@ def init_routes(app):
 
     @app.errorhandler(401)
     async def unauthorized(error):
+        logger.warning('Unauthorized access attempt.')
         flash('Please log in to access this page.', 'warning')
         return redirect(url_for('login', next=request.url))
 
@@ -27,7 +32,7 @@ def init_routes(app):
     @app.route("/process_email_results", methods=['GET', 'POST'])
     @login_required
     async def process_email_results():
-        print(f"Entering process_email_results {request.method}, user_id: {current_user.id} ") 
+        logger.info(f"Entering process_email_results {request.method}, user_id: {current_user.id}")
         if request.method == 'GET':
             account_id = request.args.get('account_id')
             if not account_id:
@@ -58,11 +63,11 @@ def init_routes(app):
                 return render_template('process.html', process_data=process_data, csrf_form=CSRFTokenForm())
             
             except Exception as e:
-                print(f"Error in process_email_results: {e}")
+                logger.error(f"Error in process_email_results: {e}")
                 return jsonify(success=False, message='An internal error occurred'), 500
 
         elif request.method == 'POST':
-            print(f"Entering process_email_results POST: {current_user.id}, {request.get_json()}")
+            logger.info(f"Entering process_email_results POST: {current_user.id}, {request.get_json()}")
             data = request.get_json()
             account_id = data.get('account_id')
             if not account_id:
@@ -89,7 +94,7 @@ def init_routes(app):
                 else:
                     return jsonify(success=False, message='No result found'), 404
             except Exception as e:
-                print(f"Error processing email results: {e}")
+                logger.error(f"Error processing email results: {e}")
                 return jsonify(success=False, error="An error occurred while processing email results"), 500
         
    

@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from email_filter.globals import processing_status
 import asyncio
 import json
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -51,6 +52,9 @@ log_interval = int(os.getenv("LOG_INTERVAL", 30))
 start_time = time.time()
 last_log_time = start_time
 
+# Use the global logger
+logger = logging.getLogger(__name__)
+
 
 def log_debug(user_id, account_id, message):
     if DEBUG_MODE:
@@ -80,7 +84,7 @@ def stop(user_id, account_id):
             update_log_entry(user_id, account_id, "Stop request received. Waiting for tasks to complete.", status='stopping')
             
     except Exception as e:
-        log_debug(user_id, account_id, f"Exception in stop: {e}")
+        logger.error(f"Exception in stop: {e}")
 
 async def process_emails(user_id, account_id):
     log_debug(user_id, account_id, f"Entering process_emails: {user_id}, {account_id}")
@@ -369,7 +373,7 @@ async def process_prompts(user_id, account_id):
                         # TODO: may need to increment a skip counter so we don't repeatedly try emails that wont work.
                         task.close()
                         tasks.remove(task)
-                        print(f"Task exceeded 60 seconds and was closed.")
+                        logger.warning(f"Task exceeded 60 seconds and was closed.")
                 await asyncio.sleep(1)
             
             for response, email in zip(results, emails):
@@ -395,7 +399,7 @@ async def process_prompts(user_id, account_id):
                             email.action = 'exclude'
                             unexpected += 1
                 except Exception as e:
-                    print(f"Error processing email {email.id}: {e}")
+                    logger.error(f"Error processing email {email.id}: {e}")
                     email.action = 'ignore'
 
             db.session.commit()
@@ -414,9 +418,6 @@ async def process_prompts(user_id, account_id):
 
 
 async def call_ollama_api(prompt_text, email, user_id, account_id):
-    global processing_status, included, excluded, refused, errored, unexpected, last_log_time, start_time, total_emails
-    """Call Ollama API with retries."""
-
     log_debug(user_id, account_id, f"Entering call_ollama_api function, user_id: {user_id}, account_id: {account_id}")
 
     max_retries = 20
@@ -455,7 +456,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
             ollama_api_url = f"http://{public_ip}:5000/api"
 
             if not ollama_api_url:
-                print(f"[ERROR] {ollama_api_url} is null for email ID {email.id}")
+                logger.error(f"{ollama_api_url} is null for email ID {email.id}")
                 return -1
 
             email_text = email.text_content
@@ -485,7 +486,7 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                         response_json = response.json()
                         response_str = response_json.get('response', response_json)
                     except Exception as e:
-                        print(f"call_ollama_api error {e}. response: {response.text}")
+                        logger.error(f"call_ollama_api error {e}. response: {response.text}")
 
                     if response_str is not None and (response_str == '0' or response_str == '1'):
                         log_debug(user_id, account_id, f"Returning {response_str}")
@@ -505,12 +506,10 @@ async def call_ollama_api(prompt_text, email, user_id, account_id):
                             pass  # If parsing fails, use response_str as is
 
                     if isinstance(response_str, str) and "can't" in response_str:
-                        # print(f"call_ollama_api received 'can't' response for email {email.id}: {response_str[:300]}")
-                        log_debug(user_id, account_id, f"Received 'can't' response for email {email.id}: {response_str[:300]}")
+                        logger.info(f"Received 'can't' response for email {email.id}: {response_str[:300]}")
                         return 2
 
-                    # print(f"call_ollama_api unexpected response {response_str}.")
-                    log_debug(user_id, account_id, f"Received unexpected response: {response_str[:300] if len(response_str) >= 300 else response_str}")
+                    logger.warning(f"Unexpected response {response_str}.")
                     return -2
 
                 elif response.status_code == 500:

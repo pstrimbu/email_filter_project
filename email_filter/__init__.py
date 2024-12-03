@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask
 from flask_wtf import CSRFProtect
 from flask_migrate import Migrate
@@ -7,7 +8,15 @@ from sqlalchemy.exc import OperationalError
 from .extensions import db, bcrypt, login_manager
 from .models import User
 from .config import Config
+from dotenv import load_dotenv
 
+# Load environment variables from the appropriate .env file
+env_file = 'dev.env' if os.environ.get('FLASK_ENV') == 'development' else 'prod.env'
+load_dotenv(os.path.join(os.path.dirname(__file__), env_file))
+
+# Configure logging using the LOG_LEVEL from the environment
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
 
 # IMPORTANT MANUAL DB STEP:
 # ALTER TABLE email MODIFY COLUMN raw_data LONGBLOB;
@@ -43,9 +52,9 @@ def create_app():
         try:
             # Attempt to connect to the database
             db.session.execute(text('SELECT 1'))
-            print("Database connection successful.")
+            logging.info("Database connection successful.")  # Use logging
         except OperationalError as e:
-            print("Database connection failed:", e)
+            logging.error("Database connection failed: %s", e)  # Use logging
             raise
 
     return app
