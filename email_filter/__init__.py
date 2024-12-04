@@ -47,12 +47,17 @@ def create_app():
     from .routes import init_routes
     init_routes(app)
 
-    # Check database connectivity
+    # Check database connectivity and set lock wait timeout
     with app.app_context():
         try:
             # Attempt to connect to the database
             db.session.execute(text('SELECT 1'))
             logging.info("Database connection successful.")  # Use logging
+
+            # Set the innodb_lock_wait_timeout
+            db.session.execute(text('SET GLOBAL innodb_lock_wait_timeout = 120'))
+            logging.info("Set innodb_lock_wait_timeout to 120 seconds.")
+
         except OperationalError as e:
             logging.error("Database connection failed: %s", e)  # Use logging
             raise
