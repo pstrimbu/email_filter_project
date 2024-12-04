@@ -60,8 +60,8 @@ def create_app():
             #    FLUSH PRIVILEGES;
 
             # Set the innodb_lock_wait_timeout
-            db.session.execute(text('SET GLOBAL innodb_lock_wait_timeout = 120'))
-            logging.info("Set innodb_lock_wait_timeout to 120 seconds.")
+            # db.session.execute(text('SET GLOBAL innodb_lock_wait_timeout = 120'))
+            # logging.info("Set innodb_lock_wait_timeout to 120 seconds.")
 
         except OperationalError as e:
             logging.error("Database connection failed: %s", e)  # Use logging
