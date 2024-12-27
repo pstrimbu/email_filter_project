@@ -46,7 +46,7 @@ class InstanceManager:
         self.timeout_minutes = 5
         self.monitor_thread = None
         self.user_id = None
-        self.account_id = None
+        self.email_account_id = None
         self._public_ip = None
         self.request_in_progress = False
 
@@ -72,7 +72,7 @@ class InstanceManager:
         """Get the public IP address."""
         return self._public_ip
 
-    async def request_instance(self, user_id=None, account_id=None):
+    async def request_instance(self, user_id=None, email_account_id=None):
         if self._public_ip:
             print(f"Using existing instance with ID: {self.instance_id} and public IP: {self._public_ip}")
             return self._public_ip
@@ -86,7 +86,7 @@ class InstanceManager:
             caller = inspect.stack()[1].function
             print(f"ERROR: request_instance: User ID cannot be None. Called from {caller}")
             return
-        if account_id is None:
+        if email_account_id is None:
             caller = inspect.stack()[1].function
             print(f"ERROR: request_instance: Account ID cannot be None. Called from {caller}")
             return
@@ -102,12 +102,12 @@ class InstanceManager:
             else:
                 user_id = self.user_id
 
-            if self.account_id:
-                account_id = self.account_id
+            if self.email_account_id:
+                email_account_id = self.email_account_id
             else:
-                account_id = account_id
+                email_account_id = email_account_id
 
-            print(f"request_instance, user_id: {user_id}, account_id: {account_id}")
+            print(f"request_instance, user_id: {user_id}, email_account_id: {email_account_id}")
                 
             last_logged_time = datetime.now()
             self.active_users.add(user_id)
@@ -123,29 +123,29 @@ class InstanceManager:
                     instance_status = self.ec2_client.describe_instance_status(InstanceIds=[self.instance_id])
                     status = instance_status['InstanceStatuses'][0]['InstanceStatus']['Status'] if instance_status['InstanceStatuses'] else None
                     if status == 'ok':
-                        update_log_entry(user_id, account_id, f"AI Server {self.instance_id} is running and ready for requests.")
+                        update_log_entry(user_id, email_account_id, f"AI Server {self.instance_id} is running and ready for requests.")
                         logging.info(f"AI Server {self.instance_id} is running and ready for requests.")
                         break
 
                 # Log the current state every 30 seconds
                 current_time = datetime.now()
                 if (current_time - last_logged_time).total_seconds() >= 30:
-                    update_log_entry(user_id, account_id, f"Waiting for AI Server to be ready. Current state: {state}, Status: {status}")
+                    update_log_entry(user_id, email_account_id, f"Waiting for AI Server to be ready. Current state: {state}, Status: {status}")
                     last_logged_time = current_time
 
                 await asyncio.sleep(5)  # Adjusted to 5 seconds
 
-            print(f"request_instance, about to get public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
+            print(f"request_instance, about to get public IP, user_id: {user_id}, email_account_id: {email_account_id}, instance_id: {self.instance_id}")
             # Retrieve the public IP address
             response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
             self._public_ip = response['Reservations'][0]['Instances'][0].get('PublicIpAddress')
             if self._public_ip:
                 print(f"request_instance, got public IP: {self._public_ip}")
-                update_log_entry(user_id, account_id, f"AI Server active: {self.instance_id} has public IP: {self._public_ip}")    
+                update_log_entry(user_id, email_account_id, f"AI Server active: {self.instance_id} has public IP: {self._public_ip}")    
                 logging.info(f"Instance {self.instance_id} has public IP: {self._public_ip}")
                 return self._public_ip
             else:
-                print(f"request_instance, no public IP, user_id: {user_id}, account_id: {account_id}, instance_id: {self.instance_id}")
+                print(f"request_instance, no public IP, user_id: {user_id}, email_account_id: {email_account_id}, instance_id: {self.instance_id}")
                 logging.error(f"Public IP not available for instance {self.instance_id}.")
                 return None
         except ClientError as e:
@@ -231,7 +231,7 @@ class SpotInstanceManager:
         self.max_runtime_minutes = 60
 
         self.user_id = None
-        self.account_id = None
+        self.email_account_id = None
         self._public_ip = None
         self.request_in_progress = False
 
@@ -261,7 +261,7 @@ class SpotInstanceManager:
         """Helper function to log messages with timestamps."""
         logging.info(message)
 
-    async def request_instance(self, user_id=None, account_id=None):
+    async def request_instance(self, user_id=None, email_account_id=None):
         print("Entering request_instance function")
         
         if self.request_in_progress:
@@ -280,10 +280,10 @@ class SpotInstanceManager:
             else:
                 user_id = self.user_id
 
-            if self.account_id:
-                account_id = self.account_id
+            if self.email_account_id:
+                email_account_id = self.email_account_id
             else:
-                account_id = account_id
+                email_account_id = email_account_id
 
             """Requests or reuses a spot instance asynchronously."""
             async with asyncio.Lock():
@@ -295,12 +295,12 @@ class SpotInstanceManager:
                     public_ip = await self._get_instance_public_ip(self.instance_id)
                     if public_ip:
                         self.set_public_ip(public_ip)
-                        update_log_entry(user_id, account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {public_ip}")
+                        update_log_entry(user_id, email_account_id, f"Using existing instance with ID: {self.instance_id} and public IP: {public_ip}")
                     else:
-                        update_log_entry(user_id, account_id, "Public IP not available for existing instance.", status='error')
+                        update_log_entry(user_id, email_account_id, "Public IP not available for existing instance.", status='error')
                     return public_ip
                 else:
-                    update_log_entry(user_id, account_id, "No active AI Server found. Checking for other registered AI Servers.")
+                    update_log_entry(user_id, email_account_id, "No active AI Server found. Checking for other registered AI Servers.")
 
                 try:
                     response = self.ec2_client.describe_instances(
@@ -317,31 +317,31 @@ class SpotInstanceManager:
                             public_ip = await self._get_instance_public_ip(self.instance_id)
                             if public_ip:
                                 self.set_public_ip(public_ip)
-                                update_log_entry(user_id, account_id, f"Found registered AI Server with ID: {self.instance_id} and public IP: {public_ip}")
+                                update_log_entry(user_id, email_account_id, f"Found registered AI Server with ID: {self.instance_id} and public IP: {public_ip}")
                                 return public_ip
                 except ClientError as e:
                     self.log(f"Error checking for active spot instances: {e}")
 
                 # Request a new spot instance
-                update_log_entry(user_id, account_id, "Requesting new AI Server.")
+                update_log_entry(user_id, email_account_id, "Requesting new AI Server.")
                 try:
-                    response = await self._request_spot_instance(user_id, account_id)
+                    response = await self._request_spot_instance(user_id, email_account_id)
                     self.spot_request_id = response["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
-                    update_log_entry(user_id, account_id, f"AI Server requested with ID: {self.spot_request_id}")
-                    return await self._wait_for_instance_launch(user_id, account_id)
+                    update_log_entry(user_id, email_account_id, f"AI Server requested with ID: {self.spot_request_id}")
+                    return await self._wait_for_instance_launch(user_id, email_account_id)
                 except ClientError as e:
-                    update_log_entry(user_id, account_id, f"Error requesting spot instance: {e}", status='error')
+                    update_log_entry(user_id, email_account_id, f"Error requesting spot instance: {e}", status='error')
                     return None
 
         finally:
             self.request_in_progress = False
 
-    async def _request_spot_instance(self, user_id, account_id):
+    async def _request_spot_instance(self, user_id, email_account_id):
         print("Entering _request_spot_instance function")
         global processing_status
         """Request a new spot instance with retries."""
         for attempt in range(20):
-            if processing_status.get((user_id, account_id)) == 'stopping':
+            if processing_status.get((user_id, email_account_id)) == 'stopping':
                 return None
             try:
                 return self.ec2_client.request_spot_instances(
@@ -365,12 +365,12 @@ class SpotInstanceManager:
                 await asyncio.sleep(2 ** attempt)
         raise ClientError("Failed to request spot instance after multiple attempts.")
 
-    async def _wait_for_instance_launch(self, user_id, account_id):
+    async def _wait_for_instance_launch(self, user_id, email_account_id):
         print("Entering _wait_for_instance_launch function")
         global processing_status
         """Wait for the spot instance to launch, then retrieve the public IP."""
         for attempt in range(20):
-            if processing_status.get((user_id, account_id)) == 'stopping':
+            if processing_status.get((user_id, email_account_id)) == 'stopping':
                 return None
             try:
                 result = self.ec2_client.describe_spot_instance_requests(SpotInstanceRequestIds=[self.spot_request_id])
@@ -382,15 +382,15 @@ class SpotInstanceManager:
                     public_ip = await self._get_instance_public_ip(instance_id)
                     if public_ip:
                         self.set_public_ip(public_ip)
-                        update_log_entry(user_id, account_id, f"Instance launched with ID: {instance_id} and public IP: {public_ip}")
+                        update_log_entry(user_id, email_account_id, f"Instance launched with ID: {instance_id} and public IP: {public_ip}")
                         return public_ip
             except ClientError as e:
-                update_log_entry(user_id, account_id, f"Waiting for instance launch, attempt {attempt + 1}: {e}", status='error')
+                update_log_entry(user_id, email_account_id, f"Waiting for instance launch, attempt {attempt + 1}: {e}", status='error')
             await asyncio.sleep(2 ** attempt)
-        update_log_entry(user_id, account_id, "AI Server launch timed out", status='error')
+        update_log_entry(user_id, email_account_id, "AI Server launch timed out", status='error')
         return None
 
-    async def _get_instance_public_ip(self, instance_id, user_id, account_id):
+    async def _get_instance_public_ip(self, instance_id, user_id, email_account_id):
         print(f"Entering _get_instance_public_ip function for instance {instance_id}")
         """Retrieve the public IP of an instance asynchronously."""
         for attempt in range(5):

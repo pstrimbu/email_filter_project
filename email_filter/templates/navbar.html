@@ -12,9 +12,9 @@
             <select id="emailAccountSelect" class="form-select">
                 {% for account in email_accounts %}
                 <option value="{{ account.id }}">
-                    {{ account.email }} 
+                    {{ account.email_address }}
                     {% if account.start_date and account.end_date %}
-                    ({{ account.start_date.strftime('%Y-%m-%d') }} - {{ account.end_date.strftime('%Y-%m-%d') }})
+                    ({{ account.start_date.strftime('%Y-%m-%d') }} to {{ account.end_date.strftime('%Y-%m-%d') }})
                     {% endif %}
                 </option>
                 {% endfor %}

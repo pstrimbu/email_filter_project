@@ -15,17 +15,13 @@
             <tbody>
                 {% for email_address in email_addresses %}
                 <tr>
-                    <td>{{ email_address.email }}</td>
-                    <td>
-                        <a href="#" class="email-count-link" data-email-id="{{ email_address.id }}">
-                            {{ email_address.email_count }}
-                        </a>
-                    </td>
+                    <td>{{ email_address.email_address }}</td>
+                    <td>{{ email_address.count }}</td>
                     <td>
                         <div class="btn-group" role="group">
-                            <button type="button" class="btn {% if email_address.state == 'exclude' %}btn-danger{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="exclude">Exclude</button>
-                            <button type="button" class="btn {% if email_address.state == 'ignore' %}btn-warning{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="ignore">Ignore</button>
-                            <button type="button" class="btn {% if email_address.state == 'include' %}btn-success{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="include">Include</button>
+                            <button type="button" class="btn {% if email_address.action == 'exclude' %}btn-danger{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="exclude">Exclude</button>
+                            <button type="button" class="btn {% if email_address.action == 'ignore' %}btn-warning{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="ignore">Ignore</button>
+                            <button type="button" class="btn {% if email_address.action == 'include' %}btn-success{% else %}btn-secondary{% endif %} toggle-action" data-email-id="{{ email_address.id }}" data-action="include">Include</button>
                         </div>
                     </td>
                 </tr>

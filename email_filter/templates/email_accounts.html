@@ -16,12 +16,12 @@
             <tbody>
                 {% for account in email_accounts %}
                 <tr>
-                    <td>{{ account.email }}</td>
+                    <td>{{ account.email_address }}</td>
                     <td>{{ account.provider }}</td>
                     <td>
                         <button class="btn btn-info btn-sm view-account" data-account-id="{{ account.id }}">View</button>
-                        <button class="btn btn-warning btn-sm edit-account" data-account-id="{{ account.id }}" data-content="{{ url_for('email_account_edit', account_id=account.id) }}">Edit</button>
-                        <form method="POST" action="{{ url_for('email_account_delete', account_id=account.id) }}" style="display:inline;">
+                        <button class="btn btn-warning btn-sm edit-account" data-account-id="{{ account.id }}" data-content="{{ url_for('email_account_edit', email_account_id=account.id) }}">Edit</button>
+                        <form method="POST" action="{{ url_for('email_account_delete', email_account_id=account.id) }}" style="display:inline;">
                             {{ csrf_form.hidden_tag() }}
                             <button type="submit" class="btn btn-danger btn-sm" data-account-id="{{ account.id }}" id="deleteAccountButton">Delete</button>
                         </form>

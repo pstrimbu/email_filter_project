@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 'Content-Type': 'application/json',
                                 'X-CSRFToken': csrfToken
                             },
-                            body: JSON.stringify({ filter: filterText, action: newAction, account_id: selectedAccountId })
+                            body: JSON.stringify({ filter: filterText, action: newAction, email_account_id: selectedAccountId })
                         })
                         .then(response => response.json())
                         .then(data => {
@@ -448,22 +448,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             promptsTableBody.addEventListener('click', function(e) {
+                const row = e.target.closest('tr');
                 if (e.target.closest('.move-up')) {
-                    const row = e.target.closest('tr');
                     const previousRow = row.previousElementSibling;
                     if (previousRow) {
                         promptsTableBody.insertBefore(row, previousRow);
                         saveOrder('prompts', [row, previousRow]);
                     }
                 } else if (e.target.closest('.move-down')) {
-                    const row = e.target.closest('tr');
                     const nextRow = row.nextElementSibling;
                     if (nextRow) {
                         promptsTableBody.insertBefore(nextRow, row);
                         saveOrder('prompts', [row, nextRow]);
                     }
                 } else if (e.target.closest('.delete-prompt')) {
-                    const row = e.target.closest('tr');
                     const promptId = row.getAttribute('data-id');
                     const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
@@ -513,9 +511,48 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         })
                         .catch(error => console.error('Error updating prompt action:', error));
+                } else if (e.target.closest('.save-prompt')) {
+                    const promptId = row.getAttribute('data-id');
+                    const promptText = row.querySelector('.prompt-text').value;
+                    const action = row.querySelector('.prompt-action-toggle').getAttribute('data-action');
+                    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+                    fetch('/ai_prompts', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrfToken
+                            },
+                            body: JSON.stringify({ id: promptId, email_account_id: selectedAccountId, prompt_text: promptText, order: promptsTableBody.children.length - 1, action: action })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                displayFlashMessage(data.message, 'success');
+                                simulateClick('ai-prompts-item'); // Simulate click to reload AI prompts
+                            } else {
+                                displayFlashMessage(data.message, 'danger');
+                            }
+                        })
+                        .catch(error => console.error('Error saving prompt:', error));
+                } else if (e.target.closest('.cancel-prompt')) {
+                    row.querySelector('.prompt-text').value = row.querySelector('.prompt-text').defaultValue;
+                }
+
+                const originalText = e.target.defaultValue;
+                const currentText = e.target.value;
+                const saveButton = row.querySelector('.save-prompt');
+                const cancelButton = row.querySelector('.cancel-prompt');
+
+                if (currentText !== originalText) {
+                    saveButton.disabled = false;
+                    cancelButton.disabled = false;
+                } else {
+                    saveButton.disabled = true;
+                    cancelButton.disabled = true;
                 }
             });
         }
+
 
         const addPromptButton = document.getElementById('addPromptButton');
         if (addPromptButton) {
@@ -548,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 'Content-Type': 'application/json',
                                 'X-CSRFToken': csrfToken
                             },
-                            body: JSON.stringify({ id: null, account_id: selectedAccountId, prompt_text: promptText, order: promptsTableBody.children.length - 1, action: newAction })
+                            body: JSON.stringify({ id: null, email_account_id: selectedAccountId, prompt_text: promptText, order: promptsTableBody.children.length - 1, action: newAction })
                         })
                         .then(response => response.json())
                         .then(data => {
@@ -645,7 +682,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
                         },
-                        body: JSON.stringify({ account_id: selectedAccountId })
+                        body: JSON.stringify({ email_account_id: selectedAccountId })
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -846,11 +883,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const emailDateElement = document.getElementById('emailDate');
                 const senderElement = document.getElementById('sender');
                 const receiversElement = document.getElementById('receivers');
-                const folderElement = document.getElementById('folder');
+                // const folderElement = document.getElementById('folder');
                 const contentElement = document.getElementById('content');
 
                 // Debugging: Log if any element is null
-                if (!emailDateElement || !senderElement || !receiversElement || !folderElement || !contentElement) {
+                if (!emailDateElement || !senderElement || !receiversElement || !contentElement) {
                     console.error('One or more elements are not found in the DOM');
                     return;
                 }
@@ -858,7 +895,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 emailDateElement.textContent = email.email_date;
                 senderElement.textContent = email.sender;
                 receiversElement.textContent = email.receivers;
-                folderElement.textContent = email.folder;
+                // folderElement.textContent = email.email_folder_id;
                 contentElement.textContent = email.text_content;
             }
 
@@ -930,7 +967,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function checkProcessEmailResults() {
         const csrfToken = document.querySelector('input[name="csrf_token"]').value;
         const url = new URL(`/process_email_results`, window.location.origin);
-        url.searchParams.append('account_id', selectedAccountId);
+        url.searchParams.append('email_account_id', selectedAccountId);
 
         fetch(url, {
                 method: 'GET',
@@ -1012,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Convert contentUrl to a URL object
                 const url = new URL(this.getAttribute('data-content'), window.location.origin);
-                url.searchParams.set('account_id', selectedAccountId);
+                url.searchParams.set('email_account_id', selectedAccountId);
 
                 // Remove active class from all items
                 document.querySelectorAll('#sidebar .list-group-item').forEach(item => {
@@ -1083,11 +1120,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update the navbar dropdown with the new dates only if the form is submitted
             const selectedOption = emailAccountSelect.querySelector(`option[value="${selectedAccountId}"]`);
             if (selectedOption) {
-                const email = selectedOption.textContent.trim().split(' ')[0]; // Assuming email is the first part
+                const email_address = selectedOption.textContent.trim().split(' ')[0]; // Assuming email is the first part
                 if (limitDatesChecked) {
-                    selectedOption.textContent = `${email} (${startDate} - ${endDate})`;
+                    selectedOption.textContent = `${email_address} (${startDate} - ${endDate})`;
                 } else {
-                    selectedOption.textContent = email; // Remove dates from the text
+                    selectedOption.textContent = email_address; // Remove dates from the text
                 }
             }
 
@@ -1156,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (target.matches('#submitEditAccountButton')) {
             e.preventDefault();
 
-            // Retrieve account_id from the data attribute
+            // Retrieve email_account_id from the data attribute
             const accountId = target.getAttribute('data-account-id');
             if (!accountId) {
                 console.error('Account ID not found.');
@@ -1242,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(data => {
                     if (data.success) {
                         displayFlashMessage('Email account added successfully!', 'success');
-                        selectedAccountId = data.account_id; // Set the new account as selected
+                        selectedAccountId = data.email_account_id; // Set the new account as selected
                         simulateClick('email-accounts-item');
                     } else {
                         displayFlashMessage('Failed to add account: ' + data.error, 'danger');
@@ -1325,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Add selectedAccountId to the form data
         if (selectedAccountId) {
-            formData.append('account_id', selectedAccountId);
+            formData.append('email_account_id', selectedAccountId);
         }
 
         fetch(url, {
@@ -1411,7 +1448,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                        <td>${item.folder}</td>
+                        <td>${item.folder_name}</td>
                         <td>${item.email_count}</td>
                         <td>${item.found_count}</td>
                         <td>
