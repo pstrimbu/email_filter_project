@@ -562,7 +562,7 @@ async def call_ollama_api(prompt_text, email, user_id, email_account_id, action)
 
                     if isinstance(response_str, str) and "can't" in response_str:
                         refused += 1
-                        logger.info(f"Received 'can't' response for email {email.id}: {response_str[:300]}")
+                        # logger.info(f"Received 'can't' response for email {email.id}: {response_str[:300]}")
                         return 2
 
                     logger.debug(f"Unexpected response: {response_str}.")
