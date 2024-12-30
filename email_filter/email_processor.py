@@ -353,23 +353,35 @@ def read_imap_emails(account, user_id):
 
                                             # Fetch or create EmailAddress for sender
                                             if sender_email not in existing_email_addresses:
-                                                sender_email_address = EmailAddress(email_address=sender_email, user_id=user_id, email_account_id=account.id)
+                                                sender_email_address = EmailAddress(
+                                                    email_address=sender_email,
+                                                    user_id=user_id,
+                                                    email_account_id=account.id,
+                                                    count=1  # Initialize count
+                                                )
                                                 db.session.add(sender_email_address)
                                                 db.session.commit()
                                                 existing_email_addresses[sender_email] = sender_email_address
                                             else:
                                                 sender_email_address = existing_email_addresses[sender_email]
+                                                sender_email_address.count += 1  # Increment count
 
                                             # Fetch or create EmailAddress for each receiver
                                             receiver_email_addresses = []
                                             for address in all_recipients_emails:
                                                 if address not in existing_email_addresses:
-                                                    email_address = EmailAddress(email_address=address, user_id=user_id, email_account_id=account.id)
+                                                    email_address = EmailAddress(
+                                                        email_address=address,
+                                                        user_id=user_id,
+                                                        email_account_id=account.id,
+                                                        count=1  # Initialize count
+                                                    )
                                                     db.session.add(email_address)
                                                     db.session.commit()
                                                     existing_email_addresses[address] = email_address
                                                 else:
                                                     email_address = existing_email_addresses[address]
+                                                    email_address.count += 1  # Increment count
                                                 receiver_email_addresses.append(email_address)
 
                                             # Create a new email record

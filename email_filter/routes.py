@@ -467,58 +467,12 @@ def init_routes(app):
             return redirect(url_for('some_default_view'))
 
         try:
-            # Create aliases for the Email table
-            SenderEmail = aliased(Email, name='sender_email')
-            ReceiverEmail = aliased(Email, name='receiver_email')
-
-            # Create a subquery to count emails for each email address
-            email_counts = db.session.query(
-                EmailAddress.id,
-                (
-                    func.count(distinct(case((SenderEmail.sender_id == EmailAddress.id, SenderEmail.id)))) +
-                    func.count(distinct(case((email_receivers.c.email_address_id == EmailAddress.id, ReceiverEmail.id))))
-                ).label('email_count')
-            ).outerjoin(
-                SenderEmail, SenderEmail.sender_id == EmailAddress.id
-            ).outerjoin(
-                email_receivers, email_receivers.c.email_address_id == EmailAddress.id
-            ).outerjoin(
-                ReceiverEmail, and_(
-                    ReceiverEmail.id == email_receivers.c.email_id,
-                    ReceiverEmail.email_account_id == email_account_id
-                )
-            ).filter(
-                EmailAddress.email_account_id == email_account_id,
-                or_(
-                    SenderEmail.email_account_id == email_account_id,
-                    ReceiverEmail.email_account_id == email_account_id
-                )
-            ).group_by(
-                EmailAddress.id
-            ).subquery()
-
-            # Get email addresses with their counts in a single query
-            email_addresses_list = db.session.query(
-                EmailAddress,
-                email_counts.c.email_count
-            ).outerjoin(
-                email_counts,
-                EmailAddress.id == email_counts.c.id
-            ).filter(
-                EmailAddress.email_account_id == email_account_id
-            ).order_by(
-                func.coalesce(email_counts.c.email_count, 0).desc()
-            ).all()
-
-            # Convert results to a list of EmailAddress objects with count attribute
-            email_addresses_with_counts = []
-            for email_address, count in email_addresses_list:
-                email_address.count = count or 0
-                email_addresses_with_counts.append(email_address)
+            # Fetch email addresses with their counts directly from the EmailAddress model
+            email_addresses = EmailAddress.query.filter_by(email_account_id=email_account_id).order_by(EmailAddress.count.desc()).all()
 
             return render_template(
                 'email_addresses.html',
-                email_addresses=email_addresses_with_counts,
+                email_addresses=email_addresses,
                 email_account_id=email_account_id
             )
 
