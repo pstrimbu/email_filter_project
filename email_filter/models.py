@@ -72,10 +72,10 @@ class EmailFolder(db.Model):
     )
 
 class Email(db.Model):
-    # Table Identifiers
+    __tablename__ = 'email'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
-    email_account_id = db.Column(db.Integer, db.ForeignKey('email_account.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, index=True)
+    email_account_id = db.Column(db.Integer, index=True)
     email_folder_id = db.Column(db.Integer, db.ForeignKey('email_folder.id', ondelete='CASCADE'), nullable=False)
 
     # Table Columns

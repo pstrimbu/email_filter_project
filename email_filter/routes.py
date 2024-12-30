@@ -317,27 +317,32 @@ def init_routes(app):
     def delete_emails(email_account_id):
         try:
             email_account_id = int(email_account_id)
-            # Ensure the account belongs to the current user
             account = EmailAccount.query.get_or_404(email_account_id)
             if account.user_id != current_user.id:
                 return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
 
-            # First, delete email receivers for the specified account and user
-            db.session.execute(
-                email_receivers.delete().where(
-                    email_receivers.c.email_id.in_(
-                        db.session.query(Email.id).filter_by(user_id=current_user.id, email_account_id=email_account_id)
+            # Define batch size
+            batch_size = 1000
+
+            # Fetch email IDs in batches
+            email_ids_query = db.session.query(Email.id).filter_by(user_id=current_user.id, email_account_id=email_account_id)
+            email_ids = email_ids_query.all()
+
+            for i in range(0, len(email_ids), batch_size):
+                batch = email_ids[i:i + batch_size]
+
+                # Delete email receivers for the batch
+                db.session.execute(
+                    email_receivers.delete().where(
+                        email_receivers.c.email_id.in_([email_id[0] for email_id in batch])
                     )
                 )
-            )
 
-            # Then, delete emails for the specified account and user
-            Email.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
+                # Delete emails for the batch
+                Email.query.filter(Email.id.in_([email_id[0] for email_id in batch])).delete(synchronize_session=False)
 
-            # Delete email addresses for the specified account and user
+            # Delete email addresses and folders
             EmailAddress.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
-
-            # Delete email folders for the specified account and user
             EmailFolder.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
 
             db.session.commit()
