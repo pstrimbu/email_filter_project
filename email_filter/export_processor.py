@@ -1,6 +1,6 @@
 from flask import current_app
 from sqlalchemy import text
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from .models import Email, EmailAddress, Filter, AIPrompt, Result, EmailAccount
 from .extensions import db
 from .aws import SpotInstanceManager, InstanceManager, delete_file_from_s3, upload_file_to_s3, generate_presigned_url
@@ -195,6 +195,7 @@ def preprocess_cleanup(user_id, email_account_id):
 
 def process_email_addresses(user_id, email_account_id):
     log_debug(user_id, email_account_id, "Entering process_email_addresses function")
+    
     # Check if there are any email addresses set to include/exclude
     has_email_addresses = db.session.query(EmailAddress).filter(
         EmailAddress.user_id == user_id,
@@ -205,57 +206,70 @@ def process_email_addresses(user_id, email_account_id):
         log_debug(user_id, email_account_id, "No email addresses with include/exclude action found")
         return
     
-    # Step 1: Retrieve all email addresses with action 'include' and 'exclude'
-    included_email_addresses = db.session.query(EmailAddress.email_address).filter(
+    total_included = 0
+    total_excluded = 0
+
+    # Subquery for emails to include
+    include_subquery = db.session.query(Email.id).join(
+        EmailAddress, Email.sender_id == EmailAddress.id
+    ).filter(
         EmailAddress.user_id == user_id,
         EmailAddress.email_account_id == email_account_id,
-        EmailAddress.action == 'include'
-    ).all()
+        EmailAddress.action == 'include',
+        Email.action == 'ignore'
+    ).union(
+        db.session.query(Email.id).join(
+            Email.receivers
+        ).filter(
+            EmailAddress.user_id == user_id,
+            EmailAddress.email_account_id == email_account_id,
+            EmailAddress.action == 'include',
+            Email.action == 'ignore'
+        )
+    ).subquery()
 
-    excluded_email_addresses = db.session.query(EmailAddress.email_address).filter(
+    # Update emails to include
+    include_emails = db.session.query(Email).filter(Email.id.in_(include_subquery)).all()
+    for email in include_emails:
+        email.action = 'include'
+        total_included += 1
+
+    # Subquery for emails to exclude
+    exclude_subquery = db.session.query(Email.id).join(
+        EmailAddress, Email.sender_id == EmailAddress.id
+    ).filter(
         EmailAddress.user_id == user_id,
         EmailAddress.email_account_id == email_account_id,
-        EmailAddress.action == 'exclude'
-    ).all()
-
-    # Convert the results to lists of email addresses
-    included_email_list = [email[0] for email in included_email_addresses]
-    excluded_email_list = [email[0] for email in excluded_email_addresses]
-
-    # Step 2: Find emails where the email address is either the sender or a receiver
-    # Update emails to 'include'
-    included_email_ids = db.session.query(Email.id).filter(
-        or_(
-            Email.sender.in_(included_email_list),
-            *[Email.receivers.like(f"%{email}%") for email in included_email_list]  # Check if any included email is in receivers
+        EmailAddress.action == 'exclude',
+        Email.action == 'ignore'
+    ).union(
+        db.session.query(Email.id).join(
+            Email.receivers
+        ).filter(
+            EmailAddress.user_id == user_id,
+            EmailAddress.email_account_id == email_account_id,
+            EmailAddress.action == 'exclude',
+            Email.action == 'ignore'
         )
-    ).all()
+    ).subquery()
 
-    # Update emails to 'exclude'
-    excluded_email_ids = db.session.query(Email.id).filter(
-        or_(
-            Email.sender.in_(excluded_email_list),
-            *[Email.receivers.like(f"%{email}%") for email in excluded_email_list]  # Check if any excluded email is in receivers
-        )
-    ).all()
-
-    # Update emails where the email address is included
-    included = db.session.query(Email).filter(
-        Email.id.in_([email_id for email_id, in included_email_ids])
-    ).update({'action': 'include'}, synchronize_session=False)
-
-    # Update emails where the email address is excluded
-    excluded = db.session.query(Email).filter(
-        Email.id.in_([email_id for email_id, in excluded_email_ids])
-    ).update({'action': 'exclude'}, synchronize_session=False)
+    # Update emails to exclude
+    exclude_emails = db.session.query(Email).filter(Email.id.in_(exclude_subquery)).all()
+    for email in exclude_emails:
+        email.action = 'exclude'
+        total_excluded += 1
 
     # Commit the changes
     db.session.commit()
 
-    ignored = db.session.query(Email).filter_by(user_id=user_id, email_account_id=email_account_id, action='ignore').count()
+    ignored = db.session.query(Email).filter_by(
+        user_id=user_id, 
+        email_account_id=email_account_id, 
+        action='ignore'
+    ).count()
 
     # Log the results
-    log_entry = f"Email address filter results - Included: {included}, Excluded: {excluded}, Remaining: {ignored}"
+    log_entry = f"Email address filter results - Included: {total_included}, Excluded: {total_excluded}, Remaining: {ignored}"
     update_log_entry(user_id, email_account_id, log_entry)
 
     log_debug(user_id, email_account_id, "Exiting process_email_addresses function")

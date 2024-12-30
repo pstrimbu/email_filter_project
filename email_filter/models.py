@@ -81,8 +81,8 @@ class Email(db.Model):
     # Table Columns
     email_imap_id = db.Column(db.String(255), nullable=True)
     email_date = db.Column(db.DateTime, nullable=False)
-    sender = db.Column(db.String(255), nullable=False, index=True)
-    receivers = db.Column(db.Text, nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('email_address.id'), nullable=False)
+    receivers = db.relationship('EmailAddress', secondary='email_receivers', backref='emails')
     action = db.Column(Enum('include', 'ignore', 'exclude', name='email_action'), nullable=False, default='ignore')
     raw_data = db.Column(LONGBLOB, nullable=False)
     email_subject = db.Column(db.String(255), nullable=False)
@@ -148,3 +148,9 @@ class Result(db.Model):
     status = db.Column(db.String(255), nullable=True)
     file_url = db.Column(LONGTEXT, nullable=True)
     zip_password = db.Column(db.String(255), nullable=True)
+
+# Secondary table for email receivers
+email_receivers = db.Table('email_receivers',
+    db.Column('email_id', db.Integer, db.ForeignKey('email.id'), primary_key=True),
+    db.Column('email_address_id', db.Integer, db.ForeignKey('email_address.id'), primary_key=True)
+)

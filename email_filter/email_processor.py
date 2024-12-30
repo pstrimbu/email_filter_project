@@ -127,6 +127,8 @@ def get_folders(email_client, account, user_id, start_date, end_date):
             logger.warning("Failed to retrieve mailboxes")
             return []
 
+        # Load all existing folders into a dictionary for quick lookup
+        existing_folders = {folder.folder_name: folder for folder in EmailFolder.query.filter_by(user_id=user_id, email_account_id=account.id).all()}
         mailboxes_with_emails = []
 
         for mailbox in mailboxes:
@@ -172,8 +174,7 @@ def get_folders(email_client, account, user_id, start_date, end_date):
 
                 if email_count > 0:
                     # Check if the folder already exists
-                    existing_folder = EmailFolder.query.filter_by(user_id=user_id, email_account_id=account.id, folder_name=mailbox_name).first()
-                    if existing_folder:
+                    if mailbox_name in existing_folders:
                         logger.info(f"Found existing folder: {mailbox_name}")
                         mailboxes_with_emails.append(mailbox_name)
                         continue
@@ -196,8 +197,11 @@ def get_folders(email_client, account, user_id, start_date, end_date):
 
                     # Add mailbox to the list of mailboxes with emails
                     mailboxes_with_emails.append(mailbox_name)
+                    # Add the new folder to existing folders to prevent future duplicates
+                    existing_folders[mailbox_name] = new_folder
             except Exception as e:
                 logger.error(f"Failed to read mailbox: {mailbox}, error: {e}")
+                db.session.rollback()  # Rollback the session to clear the transaction state
                 continue
 
         return mailboxes_with_emails
@@ -227,9 +231,6 @@ def read_imap_emails(account, user_id):
         start_date = account.start_date
         end_date = account.end_date + timedelta(days=1) if account.end_date else None
 
-        # Retrieve existing folders and their email counts from the Email table
-        existing_folders = {folder.folder_name: folder for folder in EmailFolder.query.filter_by(user_id=user_id, email_account_id=account.id).all()}
-
         # Initialize an empty set for existing email addresses
         existing_email_addresses = {
             email_address.email_address: email_address for email_address in EmailAddress.query.filter_by(user_id=user_id, email_account_id=account.id).all()
@@ -240,6 +241,9 @@ def read_imap_emails(account, user_id):
 
         # Get mailboxes with emails
         mailboxes_with_emails = get_folders(email_client, account, user_id, start_date, end_date)
+
+        # Retrieve existing folders and their email counts from the Email table
+        existing_folders = {folder.folder_name: folder for folder in EmailFolder.query.filter_by(user_id=user_id, email_account_id=account.id).all()}
 
         for mailbox_name in mailboxes_with_emails:
             try:
@@ -347,54 +351,41 @@ def read_imap_emails(account, user_id):
                                             email_body = ' '.join(content.split())
                                             text_content = f"{email_subject} {email_body}"
 
-                                            receivers_str = ','.join(all_recipients_emails)
+                                            # Fetch or create EmailAddress for sender
+                                            if sender_email not in existing_email_addresses:
+                                                sender_email_address = EmailAddress(email_address=sender_email, user_id=user_id, email_account_id=account.id)
+                                                db.session.add(sender_email_address)
+                                                db.session.commit()
+                                                existing_email_addresses[sender_email] = sender_email_address
+                                            else:
+                                                sender_email_address = existing_email_addresses[sender_email]
+
+                                            # Fetch or create EmailAddress for each receiver
+                                            receiver_email_addresses = []
+                                            for address in all_recipients_emails:
+                                                if address not in existing_email_addresses:
+                                                    email_address = EmailAddress(email_address=address, user_id=user_id, email_account_id=account.id)
+                                                    db.session.add(email_address)
+                                                    db.session.commit()
+                                                    existing_email_addresses[address] = email_address
+                                                else:
+                                                    email_address = existing_email_addresses[address]
+                                                receiver_email_addresses.append(email_address)
 
                                             # Create a new email record
                                             email = Email(
                                                 user_id=user_id,
                                                 email_account_id=account.id,
-                                                email_folder_id=email_folder.id,  # Use email_folder_id
+                                                email_folder_id=email_folder.id,
                                                 email_date=email_date,
-                                                sender=sender_email,
-                                                receivers=receivers_str,
+                                                sender_id=sender_email_address.id,
+                                                receivers=receiver_email_addresses,
                                                 raw_data=raw_email_data,
                                                 email_subject=email_subject[:250],
                                                 text_content=text_content
                                             )
                                             db.session.add(email)
-
-                                            # Update the count for each email address
-                                            for address in email.receivers.split(','):
-                                                if address in existing_email_addresses:
-                                                    email_address = existing_email_addresses[address]
-                                                    email_address.count += 1
-                                                else:
-                                                    # Create a new EmailAddress entry if it doesn't exist
-                                                    email_address = EmailAddress(
-                                                        email_address=address.strip(),
-                                                        action='ignore',
-                                                        email_account_id=account.id,
-                                                        user_id=user_id,
-                                                        count=1
-                                                    )
-                                                    db.session.add(email_address)
-                                                    existing_email_addresses[address] = email_address
-
-                                            # Update the count for the sender
-                                            if email.sender in existing_email_addresses:
-                                                sender_address = existing_email_addresses[email.sender]
-                                                sender_address.count += 1
-                                            else:
-                                                # Create a new EmailAddress entry if it doesn't exist
-                                                sender_address = EmailAddress(
-                                                    email_address=email.sender,
-                                                    action='ignore',
-                                                    email_account_id=account.id,
-                                                    user_id=user_id,
-                                                    count=1
-                                                )
-                                                db.session.add(sender_address)
-                                                existing_email_addresses[email.sender] = sender_address
+                                            db.session.commit()
 
                                     except Exception as e:
                                         logger.error(f"Error processing email {email_id}: {e}")

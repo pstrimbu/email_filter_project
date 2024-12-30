@@ -2,7 +2,7 @@ import os
 from flask import render_template, url_for, flash, redirect, request, jsonify, send_from_directory
 from flask_login import login_user, current_user, logout_user, login_required
 from .forms import RegistrationForm, LoginForm, EmailAccountForm, CSRFTokenForm, JobForm
-from .models import Filter, EmailAccount, EmailAddress, User, Email, EmailFolder, AIPrompt, Result
+from .models import Filter, EmailAccount, EmailAddress, User, Email, EmailFolder, AIPrompt, Result, email_receivers
 from datetime import datetime
 from .email_processor import read_imap_emails
 from imaplib import IMAP4_SSL
@@ -10,7 +10,8 @@ from email.policy import default
 from . import bcrypt, db
 from email_filter.globals import scan_status, processing_status
 from .export_processor import process_emails, stop
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, case, distinct, and_
+from sqlalchemy.orm import aliased
 from email_filter.aws import SpotInstanceManager, delete_file_from_s3
 import logging
 
@@ -321,7 +322,16 @@ def init_routes(app):
             if account.user_id != current_user.id:
                 return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
 
-            # Delete emails for the specified account and user
+            # First, delete email receivers for the specified account and user
+            db.session.execute(
+                email_receivers.delete().where(
+                    email_receivers.c.email_id.in_(
+                        db.session.query(Email.id).filter_by(user_id=current_user.id, email_account_id=email_account_id)
+                    )
+                )
+            )
+
+            # Then, delete emails for the specified account and user
             Email.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
 
             # Delete email addresses for the specified account and user
@@ -450,24 +460,75 @@ def init_routes(app):
                 email_account_id = int(email_account_id)
             except ValueError:
                 flash('Invalid Account ID', 'danger')
-                return redirect(url_for('some_default_view'))  # Redirect if invalid email_account_id
+                return redirect(url_for('some_default_view'))
 
         if not email_account_id:
             flash('Account ID is required', 'danger')
-            return redirect(url_for('some_default_view'))  # Redirect to a default view if email_account_id is missing
+            return redirect(url_for('some_default_view'))
 
         try:
-            # Fetch email addresses and their counts directly from the EmailAddress table
-            email_addresses_list = EmailAddress.query.filter_by(email_account_id=email_account_id).all()
+            # Create aliases for the Email table
+            SenderEmail = aliased(Email, name='sender_email')
+            ReceiverEmail = aliased(Email, name='receiver_email')
 
-            # Sort by count in descending order
-            email_addresses_list.sort(key=lambda x: x.count, reverse=True)
+            # Create a subquery to count emails for each email address
+            email_counts = db.session.query(
+                EmailAddress.id,
+                (
+                    func.count(distinct(case((SenderEmail.sender_id == EmailAddress.id, SenderEmail.id)))) +
+                    func.count(distinct(case((email_receivers.c.email_address_id == EmailAddress.id, ReceiverEmail.id))))
+                ).label('email_count')
+            ).outerjoin(
+                SenderEmail, SenderEmail.sender_id == EmailAddress.id
+            ).outerjoin(
+                email_receivers, email_receivers.c.email_address_id == EmailAddress.id
+            ).outerjoin(
+                ReceiverEmail, and_(
+                    ReceiverEmail.id == email_receivers.c.email_id,
+                    ReceiverEmail.email_account_id == email_account_id
+                )
+            ).filter(
+                EmailAddress.email_account_id == email_account_id,
+                or_(
+                    SenderEmail.email_account_id == email_account_id,
+                    ReceiverEmail.email_account_id == email_account_id
+                )
+            ).group_by(
+                EmailAddress.id
+            ).subquery()
+
+            # Get email addresses with their counts in a single query
+            email_addresses_list = db.session.query(
+                EmailAddress,
+                email_counts.c.email_count
+            ).outerjoin(
+                email_counts,
+                EmailAddress.id == email_counts.c.id
+            ).filter(
+                EmailAddress.email_account_id == email_account_id
+            ).order_by(
+                func.coalesce(email_counts.c.email_count, 0).desc()
+            ).all()
+
+            # Convert results to a list of EmailAddress objects with count attribute
+            email_addresses_with_counts = []
+            for email_address, count in email_addresses_list:
+                email_address.count = count or 0
+                email_addresses_with_counts.append(email_address)
+
+            return render_template(
+                'email_addresses.html',
+                email_addresses=email_addresses_with_counts,
+                email_account_id=email_account_id
+            )
 
         except Exception as e:
             flash(f'Error fetching email addresses: {str(e)}', 'danger')
-            email_addresses_list = []
-
-        return render_template('email_addresses.html', email_addresses=email_addresses_list, email_account_id=email_account_id)
+            return render_template(
+                'email_addresses.html',
+                email_addresses=[],
+                email_account_id=email_account_id
+            )
 
     
 
@@ -752,8 +813,8 @@ def init_routes(app):
             # Query emails where the email address is in the sender or receivers
             emails = Email.query.filter(
                 or_(
-                    Email.sender == email_str,
-                    Email.receivers.like(f"%{email_str}%")
+                    Email.sender_id == email_address.id,
+                    Email.receivers.any(EmailAddress.id == email_address.id)
                 )
             ).slice(start, end).all()
 
@@ -763,8 +824,8 @@ def init_routes(app):
 
             total_emails = Email.query.filter(
                 or_(
-                    Email.sender == email_str,
-                    Email.receivers.like(f"%{email_str}%")
+                    Email.sender_id == email_address.id,
+                    Email.receivers.any(EmailAddress.id == email_address.id)
                 )
             ).count()
 
@@ -797,8 +858,8 @@ def init_routes(app):
                 email_data.extend([{
                     'id': email.id,
                     'email_date': email.email_date.strftime('%Y-%m-%d %H:%M:%S') if email.email_date else '',
-                    'sender': email.sender,
-                    'receivers': email.receivers,
+                    'sender': EmailAddress.query.get(email.sender_id).email_address if email.sender_id else '',
+                    'receivers': [receiver.email_address for receiver in email.receivers],
                     'email_folder_id': email.email_folder_id,
                     'text_content': email.text_content
                 } for email in emails])
@@ -812,21 +873,39 @@ def init_routes(app):
     @login_required
     def get_emails_for_filter(filter_id):
         try:
-            # Fetch the filter using the provided ID
             filter_obj = Filter.query.get_or_404(filter_id)
-
-            # Ensure the filter belongs to the current user
             if filter_obj.user_id != current_user.id:
                 return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
 
-            # Query emails that match the filter text
-            emails = Email.query.filter(
+            email_ids = db.session.query(Email.id).filter(
                 Email.email_account_id == filter_obj.email_account_id,
                 Email.text_content.contains(filter_obj.filter)
             ).all()
 
-            email_data = [{'id': email.id} for email in emails]
-
+            email_data = [{'id': id[0]} for id in email_ids]
             return jsonify(success=True, email_ids=email_data)
         except Exception as e:
             return jsonify(success=False, message=str(e))
+
+    @app.route('/get_emails_for_address_modal/<address>')
+    @login_required
+    def get_emails_for_address_modal(address):
+        try:
+            # First find the EmailAddress record
+            email_address = EmailAddress.query.filter_by(email_address=address).first()
+            if not email_address:
+                return jsonify(success=False, message='Email address not found'), 404
+
+            # Get only email IDs where this address is either sender or receiver
+            email_ids = db.session.query(Email.id).filter(
+                or_(
+                    Email.sender_id == email_address.id,
+                    Email.receivers.any(EmailAddress.id == email_address.id)
+                )
+            ).all()
+
+            # Convert list of tuples to list of dicts directly
+            email_data = [{'id': id[0]} for id in email_ids]
+            return jsonify(success=True, email_ids=email_data)
+        except Exception as e:
+            return jsonify(success=False, message=str(e)), 500

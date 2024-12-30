@@ -925,16 +925,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let emailAddressesTable = document.getElementById('emailAddressesTable')
         if (emailAddressesTable) {
-
             // Event listener for email count links
             document.querySelectorAll('.email-count-link').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
                     document.getElementById('loadingSpinner').style.display = 'flex';
-                    const emailId = this.getAttribute('data-email-id');
+                    const address = this.getAttribute('data-address');
                     modalEmailList = []
                     loadEmailBatch(0);
-                    fetch(`/get_email_ids_for_address/${emailId}`)
+                    fetch(`/get_emails_for_address_modal/${address}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
