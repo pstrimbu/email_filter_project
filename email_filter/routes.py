@@ -321,13 +321,6 @@ def init_routes(app):
             if account.user_id != current_user.id:
                 return jsonify({'success': False, 'message': 'Unauthorized action'}), 403
 
-            # Delete email addresses and folders
-            EmailAddress.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
-            db.session.commit()
-
-            EmailFolder.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
-            db.session.commit()
-
             # Define batch size
             batch_size = 1000
 
@@ -348,6 +341,13 @@ def init_routes(app):
                 # Delete emails for the batch
                 Email.query.filter(Email.id.in_([email_id[0] for email_id in batch])).delete(synchronize_session=False)
                 db.session.commit()
+
+            # Delete email addresses and folders
+            EmailAddress.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
+            db.session.commit()
+
+            EmailFolder.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
+            db.session.commit()
 
             return jsonify({'success': True, 'message': 'Emails, email addresses, and email folders cleared successfully.'})
         except Exception as e:
