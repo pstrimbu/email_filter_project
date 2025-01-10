@@ -217,6 +217,10 @@ def init_routes(app):
                         new_account.imap_server = 'imap.mail.me.com'
                         new_account.imap_port = 993
                         new_account.imap_use_ssl = True
+                    elif email_form.email_type.data == 'OFFICE':
+                        new_account.imap_server = 'outlook.office365.com'
+                        new_account.imap_port = 993
+                        new_account.imap_use_ssl = True
 
                     db.session.add(new_account)
                     db.session.commit()
@@ -251,6 +255,10 @@ def init_routes(app):
                         account.imap_use_ssl = True
                     elif form.email_type.data == 'APPLE':
                         account.imap_server = 'imap.mail.me.com'
+                        account.imap_port = 993
+                        account.imap_use_ssl = True
+                    elif form.email_type.data == 'OFFICE':
+                        account.imap_server = 'outlook.office365.com'
                         account.imap_port = 993
                         account.imap_use_ssl = True
 
@@ -368,7 +376,7 @@ def init_routes(app):
 
     def test_email_connection_logic(email_address, password, email_type, server, port):
         try:
-            if email_type in ['GMAIL', 'APPLE']:
+            if email_type in ['GMAIL', 'APPLE', 'OFFICE']:
                 imap = IMAP4_SSL(server, port)
                 imap.login(email_address, password)
                 imap.logout()

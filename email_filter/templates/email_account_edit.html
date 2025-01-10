@@ -8,6 +8,7 @@
             <select id="emailTypeSelect" name="email_type" class="form-control">
                 <option value="GMAIL" {% if account.provider == 'GMAIL' %}selected{% endif %}>GMAIL</option>
                 <option value="APPLE" {% if account.provider == 'APPLE' %}selected{% endif %}>APPLE</option>
+                <option value="OFFICE" {% if account.provider == 'OFFICE' %}selected{% endif %}>OFFICE</option>
             </select>
         </div>
 
