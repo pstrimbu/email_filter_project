@@ -1,25 +1,35 @@
-from flask import current_app
-from sqlalchemy import text
-from sqlalchemy import or_, and_
-from .models import Email, EmailAddress, Filter, AIPrompt, Result, EmailAccount
-from .extensions import db
-from .aws import SpotInstanceManager, InstanceManager, delete_file_from_s3, upload_file_to_s3, generate_presigned_url
-from email_filter.logger import update_log_entry
-import mailbox
-import tempfile
-from datetime import datetime
+# Standard Library Imports
 import os
 import time
-import requests
-from requests.exceptions import RequestException
-import random
-import string
-import pyminizip
-from dotenv import load_dotenv
-from email_filter.globals import processing_status
-import asyncio
 import json
 import logging
+import secrets
+from datetime import datetime
+from dotenv import load_dotenv
+import tempfile
+import mailbox
+
+# Third-Party Imports
+import pyminizip
+import requests
+from sqlalchemy.exc import SQLAlchemyError
+
+# Flask Imports
+from flask import current_app
+
+# Local Application Imports
+from .models import Email, EmailAddress, Filter, AIPrompt, Result, EmailAccount
+from .extensions import db
+from .aws import (
+    SpotInstanceManager,
+    InstanceManager,
+    delete_file_from_s3,
+    upload_file_to_s3,
+    generate_presigned_url,
+)
+from email_filter.logger import update_log_entry
+from email_filter.globals import processing_status
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -603,49 +613,70 @@ async def call_ollama_api(prompt_text, email, user_id, email_account_id, action)
 def generate_files(user_id, email_account_id):
     log_debug(user_id, email_account_id, "Entering generate_files function")
     """Generates and uploads email files."""
-    email_account = EmailAccount.query.get(email_account_id)
-    if not email_account:
-        raise ValueError(f"No EmailAccount found for email_account_id: {email_account_id}")
-
-    email_address = email_account.email_address
-    timestamp = datetime.now().strftime('%Y%m%d%H%M')
-     
-    if email_account.start_date is not None and email_account.end_date is not None:
-        date_range = f"{email_account.start_date.strftime('%Y%m%d')}-{email_account.end_date.strftime('%Y%m%d')}"
-        mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
-        zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
-    else:
-        mbox_filename = f"{email_address}-{timestamp}.mbox"
-        zip_filename = f"{email_address}-{timestamp}.zip"
-
-    zip_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-    mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
-    mbox = mailbox.mbox(mbox_path, create=True)
     try:
-        query = db.session.query(Email).filter_by(user_id=user_id, email_account_id=email_account_id, action='include')
-        for email in query.yield_per(100):
-            mbox.add(mailbox.mboxMessage(email.raw_data))
-    finally:
-        mbox.close()
+        # Fetch email account details
+        email_account = EmailAccount.query.get(email_account_id)
+        if not email_account:
+            raise ValueError(f"No EmailAccount found for email_account_id: {email_account_id}")
 
-    with tempfile.NamedTemporaryFile(delete=False) as temp_zip_file:
-        zip_path = temp_zip_file.name
+        email_address = email_account.email_address
+        timestamp = datetime.now().strftime('%Y%m%d%H%M')
+
+        if email_account.start_date and email_account.end_date:
+            date_range = f"{email_account.start_date.strftime('%Y%m%d')}-{email_account.end_date.strftime('%Y%m%d')}"
+            mbox_filename = f"{email_address}-{date_range}-{timestamp}.mbox"
+            zip_filename = f"{email_address}-{date_range}-{timestamp}.zip"
+        else:
+            mbox_filename = f"{email_address}-{timestamp}.mbox"
+            zip_filename = f"{email_address}-{timestamp}.zip"
+
+        zip_password = secrets.token_urlsafe(12)
+        mbox_path = os.path.join(tempfile.gettempdir(), mbox_filename)
+        mbox = mailbox.mbox(mbox_path, create=True)
+
+        try:
+            query = db.session.query(Email).filter_by(
+                user_id=user_id, email_account_id=email_account_id, action='include'
+            )
+            for email in query.yield_per(100):
+                mbox.add(mailbox.mboxMessage(email.raw_data))
+        finally:
+            mbox.close()
+
+        # Create a zip file with password protection
+        with tempfile.NamedTemporaryFile(delete=False) as temp_zip_file:
+            zip_path = temp_zip_file.name
         pyminizip.compress(mbox_path, None, zip_path, zip_password, 5)
 
-    upload_file_to_s3(zip_path, 'mailmatch', zip_filename)
+        # Upload to S3 and generate presigned URL
+        bucket_name = os.getenv("S3_BUCKET_NAME")
+        upload_success = upload_file_to_s3(zip_path, bucket_name, zip_filename)
+        if not upload_success:
+            raise RuntimeError("Failed to upload file to S3.")
 
-    presigned_url = generate_presigned_url('mailmatch', zip_filename)
+        presigned_url = generate_presigned_url('mailmatch', zip_filename)
 
-    update_log_entry(user_id, email_account_id, "Generated zip file and uploaded to S3.", status='finished')
+        # Update log and database
+        update_log_entry(user_id, email_account_id, "Generated zip file and uploaded to S3.", status='finished')
 
-    result = Result.query.filter_by(user_id=user_id, email_account_id=email_account_id).first()
-    if result:
-        result.zip_password = zip_password
-        result.file_url = presigned_url
-        result.name = zip_filename
-        db.session.commit()
+        result = Result.query.filter_by(user_id=user_id, email_account_id=email_account_id).first()
+        if result:
+            result.zip_password = zip_password
+            result.file_url = presigned_url
+            result.name = zip_filename
+            db.session.commit()
 
-    os.remove(mbox_path)
-    os.remove(zip_path)
+        return zip_filename, presigned_url
 
-    return zip_filename, presigned_url
+    except (ValueError, SQLAlchemyError, RuntimeError) as e:
+        log_debug(user_id, email_account_id, f"Error in generate_files: {str(e)}")
+        raise
+    finally:
+        # Clean up temporary files
+        try:
+            if os.path.exists(mbox_path):
+                os.remove(mbox_path)
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+        except Exception as cleanup_error:
+            log_debug(user_id, email_account_id, f"Error cleaning up temporary files: {str(cleanup_error)}")

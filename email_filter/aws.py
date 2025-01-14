@@ -477,6 +477,7 @@ def upload_file_to_s3(file_path, bucket_name, file_key):
         s3_client = boto3.client('s3')
         s3_client.upload_file(file_path, bucket_name, file_key)
         logging.info(f"Uploaded file {file_key} to bucket {bucket_name}.")
+        return True
     except ClientError as e:
         logging.error(f"Error uploading file to S3: {e}")
         raise
