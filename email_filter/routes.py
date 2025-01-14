@@ -350,10 +350,11 @@ def init_routes(app):
                 Email.query.filter(Email.id.in_([email_id[0] for email_id in batch])).delete(synchronize_session=False)
                 db.session.commit()
 
-            # Delete email addresses and folders
-            EmailAddress.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
+            # Set count to 0 for all email addresses instead of deleting them
+            EmailAddress.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).update({'count': 0})
             db.session.commit()
 
+            # Delete email folders
             EmailFolder.query.filter_by(user_id=current_user.id, email_account_id=email_account_id).delete()
             db.session.commit()
 
