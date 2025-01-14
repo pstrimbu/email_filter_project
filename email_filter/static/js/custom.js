@@ -611,13 +611,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const stopResultsButton = document.getElementById('stopResultsButton');
         const processResultsButton = document.getElementById('processResultsButton');
 
-        if (stopResultsButton && resultsRunningIndicator && processResultsButton) {
-            if (resultsRunningIndicator.style.display === 'none') {
-                processResultsButton.disabled = false;
-            } else {
-                processResultsButton.disabled = true;
-            }
-        }
+        // if (stopResultsButton && resultsRunningIndicator && processResultsButton) {
+        //     if (resultsRunningIndicator.style && resultsRunningIndicator.style.display === "none") {
+        //         processResultsButton.disabled = false;
+        //     } else {
+        //         processResultsButton.disabled = true;
+        //     }
+        // }
 
         if (liveResultsUpdateToggle) {
             liveResultsUpdateToggle.addEventListener('change', function() {
@@ -790,7 +790,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(data => {
                         if (data.success) {
                             displayFlashMessage('File deleted successfully!', 'success');
-                            checkProcessEmailResults();
+                            simulateClick('process-item');
+                            // checkProcessEmailResults();
                         } else {
                             displayFlashMessage('Failed to delete file: ' + data.message, 'danger');
                         }
@@ -812,6 +813,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentBatch = batchNumber;
                 const start = batchNumber * batchSize;
                 const end = start + batchSize;
+                if (modalEmailList.length == 0) {
+                    return;
+                }
                 const emailBatch = modalEmailList.slice(start, end);
 
                 // Show the loading spinner
@@ -1007,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.error('Process results elements not found in the current document.');
                     }
 
-                    if (status === 'Status: finished' || status === 'Status: error') {
+                    if (status === 'Status: finished' || status === 'Status: error' || status === 'Status: not started') {
                         resultsRunningIndicator.style.display = 'none';
                         stopResultsButton.style.display = 'none';
                         processResultsButton.disabled = false;
@@ -1494,6 +1498,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 displayFlashMessage('Error checking scan status: ' + error, 'danger');
                 console.error('Error checking scan status:', error);
             });
+    }
+
+    // Example JavaScript to toggle modal and overlay
+    function showModal() {
+        document.body.classList.add('modal-active');
+        document.querySelector('.modal-content').style.display = 'block';
+        document.querySelector('.modal-overlay').style.display = 'block';
+    }
+
+    function hideModal() {
+        document.body.classList.remove('modal-active');
+        document.querySelector('.modal-content').style.display = 'none';
+        document.querySelector('.modal-overlay').style.display = 'none';
     }
 
 });
