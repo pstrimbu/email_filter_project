@@ -744,7 +744,7 @@ def init_routes(app):
 
         return jsonify({'success': True, 'message': 'Prompt action updated successfully'})
 
-    @app.route('/delete_file/<int:file_key>', methods=['POST'])
+    @app.route('/delete_file/<string:file_key>', methods=['POST'])
     @login_required
     def delete_file(file_key):
         bucket_name = os.getenv('S3_BUCKET_NAME')
