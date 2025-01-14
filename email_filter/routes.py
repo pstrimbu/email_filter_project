@@ -748,7 +748,12 @@ def init_routes(app):
     @login_required
     def delete_file(file_key):
         bucket_name = os.getenv('S3_BUCKET_NAME')
-        if delete_file_from_s3('mailmatch', file_key):
+        if delete_file_from_s3(bucket_name, file_key):
+            # Find and delete the corresponding result entry
+            result = Result.query.filter_by(user_id=current_user.id, file_url=file_key).first()
+            if result:
+                db.session.delete(result)
+                db.session.commit()
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'message': 'Failed to delete file from S3'})
